@@ -37,6 +37,10 @@ class KuroWorker:
         if self.worker is None:
             self.worker = self.client.register_worker(self.name)
 
+    def exit(self):
+        # Mark worker as not-active, delete all incomplete trials
+        pass
+
 
 class KuroManager:
     def __init__(self, worker: KuroWorker, experiment: KuroExperiment):
@@ -45,6 +49,10 @@ class KuroManager:
 
     def trial(self):
         return KuroTrial(self.worker, self.experiment)
+
+    def exit(self):
+        # Mark worker as not-active, delete all incomplete trials
+        pass
 
 
 class KuroTrial:
@@ -69,10 +77,12 @@ manager = KuroManager(worker, experiment)
 
 # Run 5 trials of same parameters
 for _ in range(5):
-    trial = manager.trial()
-    for step in range(10):
-        trial.report_metric('test_acc', 10 + step, step=step) # Explicitly pass step, no need for mode since it was passed in metrics
-        trial.report_metric('test_loss', -1 - step, mode='min') # Allow step to be auto-computed, need mode since its a new metric on first iteration
+    trial = manager.trial() # If worker doesn't have a trial for experiment make one, otherwise fetch it
+    for step in range(10): # Steps can be epochs or batch steps etc
+        acc, loss = 9 + step, -1 - step # Model results here from testing data
+        trial.report_metric('test_acc', acc, step=step) # Explicitly pass step, no need for mode since it was passed in metrics
+        trial.report_metric('test_loss', loss, mode='min') # Allow step to be auto-computed, need mode since its a new metric on first iteration
 
     trial.report_metric('final_metric', 98, mode='max') # similarly new metric needs mode
     trial.complete() # Mark trial as complete
+manager.exit()
