@@ -1,0 +1,18 @@
+[
+  {
+    "model": "experiment.metric",
+    "pk": 1,
+    "fields": {
+      "name": "accuracy",
+      "mode": "max"
+    }
+  },
+  {
+    "model": "experiment.metric",
+    "pk": 2,
+    "fields": {
+      "name": "loss",
+      "mode": "min"
+    }
+  }
+]

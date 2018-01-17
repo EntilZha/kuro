@@ -1,0 +1,5 @@
+django
+djangorestframework
+jsonfield
+coreapi
+coreapi-cli
