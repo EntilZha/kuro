@@ -1,10 +1,56 @@
-from typing import Dict, Optional
+from typing import List, Dict
+import json
+import os
 from collections import defaultdict
-from kuro.client.api import KuroClient
+
+import coreapi
+import cpuinfo
+import psutil
+from gpustat import GPUStatCollection
+
+
+def get_gpu_list():
+    try:
+        gpu_collection = GPUStatCollection.new_query()
+        gpu_infos = [
+            g.jsonify()
+            for g in gpu_collection
+        ]
+        gpu_json = {
+            'gpus': [
+                {'name': g['name'], 'memory': float(g['memory.total']) / 1024}
+                for g in gpu_infos
+            ]
+        }
+        return gpu_json
+    except:
+        return {'gpus': []}
 
 
 
-class KuroExperiment:
+
+
+class KuroClient:
+    def __init__(self, endpoint: str):
+        self.schema_endpoint = os.path.join(endpoint, 'schema')
+        self.client = coreapi.Client()
+        self.schema = self.client.get(self.schema_endpoint)
+
+    def list_workers(self):
+        return self.client.action(self.schema, ['workers', 'list'])
+
+    def register_worker(self, name, cpu_brand, memory, gpus):
+        return self.client.action(
+            self.schema,
+            ['workers', 'create'],
+            params={'name': name, 'cpu_brand': cpu_brand, 'memory': memory, 'gpus': gpus, 'active': True}
+        )
+
+    def get_or_create_experiment(self, group, identifier, hyper_parameters, metrics: Dict[str, str], n_trials=1):
+        pass
+
+
+class Experiment:
     def __init__(self, group, identifier, hyper_parameters=None, metrics=None, n_trials=1):
         self.group = group
         self.identifier = identifier
@@ -19,44 +65,51 @@ class KuroExperiment:
             self.metrics = {}
         elif isinstance(metrics, dict):
             self.metrics = metrics
-        else:
+        elif isinstance(metrics, list):
             self.metrics = {}
             for name, mode in metrics:
                 self.metrics[name] = mode
 
 
-class KuroWorker:
+class Worker:
     def __init__(self, name, endpoint='http://localhost:8000'):
-        self.name = name
         self.client = KuroClient(endpoint=endpoint)
         workers = self.client.list_workers()
-        self.worker = None
+        worker = None
         for w in workers:
-            if w.name == name:
-                self.worker = w
-        if self.worker is None:
-            self.worker = self.client.register_worker(self.name)
+            if w['name'] == name:
+                worker = w
 
-    def exit(self):
-        # Mark worker as not-active, delete all incomplete trials
-        pass
+        if worker is None:
+            cpu_data = cpuinfo.get_cpu_info()
+            cpu_brand = cpu_data['brand'] if 'brand' in cpu_data else ''
+            memory = psutil.virtual_memory().total / 1073741824
+            gpus = json.dumps(get_gpu_list())
+            worker = self.client.register_worker(self.name, cpu_brand, memory, gpus)
+
+        self.name = worker['name']
+        self.created_at = worker['created_at']
+        self.active = worker['active']
+        self.cpu_brand = worker['cpu_brand']
+        self.memory = worker['memory']
+        self.gpus = worker['gpus']
 
 
-class KuroManager:
-    def __init__(self, worker: KuroWorker, experiment: KuroExperiment):
+class Manager:
+    def __init__(self, worker: Worker, experiment: Experiment):
         self.worker = worker
         self.experiment = experiment
 
     def trial(self):
-        return KuroTrial(self.worker, self.experiment)
+        return Trial(self.worker, self.experiment)
 
     def exit(self):
         # Mark worker as not-active, delete all incomplete trials
         pass
 
 
-class KuroTrial:
-    def __init__(self, worker: KuroWorker, experiment: KuroExperiment):
+class Trial:
+    def __init__(self, worker: Worker, experiment: Experiment):
         self.worker = worker
         self.experiment = experiment
         self.results = defaultdict(list)
@@ -67,13 +120,13 @@ class KuroTrial:
     def complete(self):
         pass
 
-worker = KuroWorker('nibel')
-experiment = KuroExperiment(
+worker = Worker('nibel')
+experiment = Experiment(
     'guesser', 'qanta.guesser.dan.DanGuesser',
     metrics={'test_acc': 'max'},
     hyper_parameters={'lr': .001} # Used to group models together and compare them
 )
-manager = KuroManager(worker, experiment)
+manager = Manager(worker, experiment)
 
 # Run 5 trials of same parameters
 for _ in range(5):

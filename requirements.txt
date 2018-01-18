@@ -3,3 +3,6 @@ djangorestframework
 jsonfield
 coreapi
 coreapi-cli
+py-cpuinfo
+psutil
+gpustat

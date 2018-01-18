@@ -2,10 +2,19 @@ from django.db import models
 from jsonfield import JSONField
 
 
+def gpus_default():
+    return {
+        'gpus': []
+    }
+
+
 class Worker(models.Model):
     name = models.CharField(max_length=100, blank=False, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    terminated = models.BooleanField(default=False)
+    active = models.BooleanField(default=False)
+    cpu_brand = models.CharField(max_length=200, default='')
+    memory = models.FloatField(default=0)
+    gpus = JSONField(default=gpus_default)
 
 class Metric(models.Model):
     MAX = 'max'
@@ -15,14 +24,14 @@ class Metric(models.Model):
         (MIN, MIN)
     )
 
-    name = models.CharField(max_length=50, blank=False)
+    name = models.CharField(max_length=50, blank=False, unique=True)
     mode = models.CharField(max_length=20, blank=False, choices=MODE_CHOICES)
 
 
 class Experiment(models.Model):
     group = models.CharField(max_length=100, blank=False)
     identifier = models.CharField(max_length=200, blank=False)
-    hyper_parameters = JSONField()
+    hyper_parameters = JSONField(default=dict)
     metrics = models.ManyToManyField(Metric)
     n_trials = models.IntegerField(default=1)
 

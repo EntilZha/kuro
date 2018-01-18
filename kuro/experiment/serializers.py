@@ -20,19 +20,19 @@ class GroupSerializer(serializers.HyperlinkedModelSerializer):
 class ExperimentSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Experiment
-        fields = ('url', 'group', 'identifier', 'hyper_parameters')
+        fields = ('url', 'group', 'identifier', 'hyper_parameters', 'metrics', 'n_trials')
 
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Trial
-        fields = ('url', 'worker', 'experiment', 'metrics', 'started_at', 'ended_at')
+        fields = ('url', 'worker', 'experiment', 'started_at', 'ended_at')
 
 
 class WorkerSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Worker
-        fields = ('url', 'name', 'created_at', 'terminated')
+        fields = ('url', 'name', 'created_at', 'active', 'cpu_brand', 'memory', 'gpus')
 
 
 class MetricSerializer(serializers.HyperlinkedModelSerializer):
@@ -50,4 +50,4 @@ class ResultSerializer(serializers.HyperlinkedModelSerializer):
 class ResultValueSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = ResultValue
-        fields = ('url', 'result', 'value')
+        fields = ('url', 'result', 'step', 'value')
