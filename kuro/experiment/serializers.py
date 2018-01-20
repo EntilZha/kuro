@@ -21,6 +21,7 @@ class ExperimentSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Experiment
         fields = ('url', 'group', 'identifier', 'hyper_parameters', 'metrics', 'n_trials')
+        depth = 1
 
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):

@@ -60,9 +60,40 @@ class KuroClient:
     def get_or_create_metric(self, name, mode=None):
         return self.query(['metrics', 'get-or-create', 'create'], params={'name': name, 'mode': mode})
 
+    def get_update_create_experiment(self, group, identifier, hyper_parameters=None, metrics=None, n_trials=None):
+        """
+        Attempt to find an experiment keyed by group, identifier, and hyper_parameters. If an experiment is found then
+        metrics are appended to existing metrics and n_trials is updated if it is not None. The return value is the
+        full experiment including possibly more metrics from previous creations
+
+        If the experiment does not exist then one is created based on the input parameters. If hyper_parameters is
+        None then an empty set of parameters is used represented by a blank dictionary
+        :param group:
+        :param identifier:
+        :param hyper_parameters:
+        :param metrics:
+        :param n_trials:
+        :return:
+        """
+        params = {
+            'group': group,
+            'identifier': identifier,
+        }
+
+        if hyper_parameters is not None:
+            params['hyper_parameters'] = hyper_parameters
+
+        if metrics is not None:
+            params['metrics'] = metrics
+
+        if n_trials is not None:
+            params['n_trials'] = n_trials
+
+        return self.query(['experiments', 'get-or-create', 'create'], params=params)
+
 
 class Experiment:
-    def __init__(self, worker: 'Worker', group, identifier, hyper_parameters=None, metrics=None, n_trials=1):
+    def __init__(self, worker: 'Worker', group, identifier, hyper_parameters=None, metrics=None, n_trials=None):
         self.worker = worker
         self.client = worker.client
         self.group = group
@@ -73,35 +104,29 @@ class Experiment:
             self.hyper_parameters = hyper_parameters
 
         self.n_trials = n_trials
-        self.metrics = {}
-        self._init_metrics(metrics)
+        initial_metrics = self._init_metrics(metrics)
+        metric_urls = [m.url for m in initial_metrics.values()]
+        experiment = self.client.get_update_create_experiment(
+            group, identifier, hyper_parameters=hyper_parameters, metrics=metric_urls, n_trials=n_trials
+        )
 
-    @staticmethod
-    def insert_metric(validated_metrics, name, raw_mode):
-        if raw_mode == 'auto':
-            if 'acc' in name:
-                mode = 'max'
-            elif 'loss' in name:
-                mode = 'min'
-            else:
-                raise ValueError(f'No default mode associated with metric "{name}"')
-            validated_metrics[name] = mode
-        elif raw_mode == 'max' or raw_mode == 'min':
-            validated_metrics[name] = raw_mode
-        else:
-            raise ValueError(f'Invalid mode: {raw_mode}')
+        self.metrics = {e['name']: Metric(e['url'], e['name'], e['mode']) for e in experiment['metrics']}
+        self.n_trials = experiment['n_trials']
 
     def _init_metrics(self, metrics):
+        if metrics is None:
+            return {}
+        metric_lookup = {}
         validated_metrics = {}
         if isinstance(metrics, dict):
             for name, mode in metrics.items():
-                self.insert_metric(validated_metrics, name, mode)
+                validated_metrics[name] = mode
         elif isinstance(metrics, list) or isinstance(metrics, tuple):
             for m in metrics:
                 if isinstance(m, str):
-                    self.insert_metric(validated_metrics, m, 'auto')
+                    validated_metrics[m] = 'auto'
                 elif (isinstance(m, tuple) or isinstance(m, list)) and len(m) == 2:
-                    self.insert_metric(validated_metrics, m[0], m[1])
+                    validated_metrics[m[0]] = m[1]
                 else:
                     raise ValueError('Invalid metric, expected string or 2-tuple of strings')
         else:
@@ -109,7 +134,8 @@ class Experiment:
 
         for name, mode in validated_metrics.items():
             m = self.client.get_or_create_metric(name, mode)
-            self.metrics[name] = Metric(m['url'], m['name'], m['mode'])
+            metric_lookup[name] = Metric(m['url'], m['name'], m['mode'])
+        return metric_lookup
 
     def trial(self) -> 'Trial':
         return Trial(self.worker, self)

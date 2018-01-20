@@ -1,10 +1,10 @@
 import json
 from django.contrib.auth.models import User, Group
 from django.db import transaction
-from django.shortcuts import get_object_or_404
 
 from rest_framework import viewsets
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from kuro.experiment.serializers import (
     UserSerializer, GroupSerializer, ExperimentSerializer,
     TrialSerializer, WorkerSerializer, MetricSerializer,
@@ -49,6 +49,15 @@ class MetricViewSet(viewsets.ModelViewSet):
 class MetricGetOrCreateViewSet(viewsets.GenericViewSet):
     serializer_class = MetricGetOrCreateSerializer
 
+    @staticmethod
+    def infer_mode(name):
+        if 'acc' in name:
+            return 'max'
+        elif 'loss' in name:
+            return 'min'
+        else:
+            raise ValidationError(f'mode could not be inferred from the name:"{name}"')
+
     @transaction.atomic
     def create(self, request):
         validated_metric = MetricGetOrCreateSerializer(data=request.data)
@@ -57,6 +66,8 @@ class MetricGetOrCreateViewSet(viewsets.GenericViewSet):
             mode = validated_metric.data['mode']
             metric = Metric.objects.filter(name=name).first()
             if metric is None:
+                if mode == 'auto':
+                    mode = MetricGetOrCreateViewSet.infer_mode(name)
                 metric_serializer = MetricSerializer(data={'name': name, 'mode': mode}, context={'request': request})
                 if metric_serializer.is_valid():
                     metric_serializer.save()
@@ -64,7 +75,7 @@ class MetricGetOrCreateViewSet(viewsets.GenericViewSet):
                 else:
                     return Response(metric_serializer.errors, status=400)
             else:
-                if mode is not None and metric.mode != mode:
+                if mode is not None and mode != 'auto' and metric.mode != mode:
                     return Response(
                         data={'errors': f'Metric with name={name} exists but with mode={metric.mode} instead of the given mode={mode}'},
                         status=400
@@ -80,9 +91,9 @@ class ExperimentGetOrCreateViewSet(viewsets.GenericViewSet):
 
     @transaction.atomic
     def create(self, request):
-        validated_experiment = ExperimentGetOrCreateSerializer(data=request.data)
+        validated_experiment = ExperimentGetOrCreateSerializer(data=request.data, context={'request': request})
         if validated_experiment.is_valid():
-            data = validated_experiment.data
+            data = validated_experiment.validated_data
             group = data['group']
             identifier = data['identifier']
             hyper_parameters = data['hyper_parameters']
