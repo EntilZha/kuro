@@ -41,6 +41,25 @@ class MetricSerializer(serializers.HyperlinkedModelSerializer):
         fields = ('url', 'name', 'mode')
 
 
+class MetricGetOrCreateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=50, allow_null=False, allow_blank=False, required=True)
+    mode = serializers.CharField(max_length=20, allow_null=True, allow_blank=True, required=False)
+
+
+class ExperimentGetOrCreateSerializer(serializers.Serializer):
+    group = serializers.CharField(max_length=100, required=True, allow_blank=False)
+    identifier = serializers.CharField(max_length=200, required=True, allow_blank=False)
+    hyper_parameters = serializers.JSONField(required=False, default=dict)
+    metrics = serializers.HyperlinkedRelatedField(
+        queryset= Metric.objects.all(),
+        many=True,
+        view_name='metric-detail',
+        required=False,
+        default=list
+    )
+    n_trials = serializers.IntegerField(required=False, default=None)
+
+
 class ResultSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Result

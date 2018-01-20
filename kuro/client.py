@@ -57,8 +57,8 @@ class KuroClient:
             m for m in metrics if name is None or m['name'] == name
         ]
 
-    def create_metric(self, name, mode):
-        return self.query(['metrics', 'create'], params={'name': name, 'mode': mode})
+    def get_or_create_metric(self, name, mode=None):
+        return self.query(['metrics', 'get-or-create', 'create'], params={'name': name, 'mode': mode})
 
 
 class Experiment:
@@ -73,6 +73,7 @@ class Experiment:
             self.hyper_parameters = hyper_parameters
 
         self.n_trials = n_trials
+        self.metrics = {}
         self._init_metrics(metrics)
 
     @staticmethod
@@ -90,12 +91,10 @@ class Experiment:
         else:
             raise ValueError(f'Invalid mode: {raw_mode}')
 
-
-
     def _init_metrics(self, metrics):
         validated_metrics = {}
         if isinstance(metrics, dict):
-            for name, mode in metrics:
+            for name, mode in metrics.items():
                 self.insert_metric(validated_metrics, name, mode)
         elif isinstance(metrics, list) or isinstance(metrics, tuple):
             for m in metrics:
@@ -108,13 +107,8 @@ class Experiment:
         else:
             raise ValueError('Incompatible metrics input')
 
-        available_metrics = {m['name']: m for m in self.client.list_metrics()}
-        self.metrics = {}
         for name, mode in validated_metrics.items():
-            if name in available_metrics:
-                m = available_metrics[name]
-            else:
-                m = self.client.create_metric(name, mode)
+            m = self.client.get_or_create_metric(name, mode)
             self.metrics[name] = Metric(m['url'], m['name'], m['mode'])
 
     def trial(self) -> 'Trial':
@@ -158,7 +152,10 @@ class Trial:
         self.results = defaultdict(list)
 
     def report_metric(self, name, value, step=None, mode=None):
-        pass
+        if name in self.experiment.metrics:
+            pass
+        else:
+            self.experiment._init_metrics({name: mode})
 
     def complete(self):
         pass

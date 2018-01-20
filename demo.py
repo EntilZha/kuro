@@ -19,6 +19,8 @@ def main():
             trial.report_metric('optimality', 0, mode='min')# Allow step to be auto-computed, need mode since its a new metric on first iteration
 
         trial.report_metric('final_metric', 98, mode='max') # similarly new metric needs mode
+        trial.report_metric('final_nums', 93, mode='min')
+        trial.report_metric('final_digits', 93, mode='min')
         trial.complete() # Mark trial as complete
 
 

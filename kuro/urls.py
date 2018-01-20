@@ -24,11 +24,13 @@ from kuro.experiment import views
 router = routers.DefaultRouter()
 router.register(r'users', views.UserViewSet)
 router.register(r'groups', views.GroupViewSet)
+router.register(r'experiments/get-or-create', views.ExperimentGetOrCreateViewSet, base_name='experiment')
 router.register(r'experiments', views.ExperimentViewSet)
 router.register(r'workers', views.WorkerViewSet)
 router.register(r'trials', views.TrialViewSet)
 router.register(r'results', views.ResultViewSet)
 router.register(r'result_values', views.ResultValueViewSet)
+router.register(r'metrics/get-or-create', views.MetricGetOrCreateViewSet, base_name='metric')
 router.register(r'metrics', views.MetricViewSet)
 
 schema_view = get_schema_view(title='Kuro API')

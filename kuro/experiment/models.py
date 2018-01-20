@@ -32,7 +32,7 @@ class Experiment(models.Model):
     group = models.CharField(max_length=100, blank=False)
     identifier = models.CharField(max_length=200, blank=False)
     hyper_parameters = JSONField(default=dict)
-    metrics = models.ManyToManyField(Metric)
+    metrics = models.ManyToManyField(Metric, blank=True)
     n_trials = models.IntegerField(default=1)
 
     class Meta:
