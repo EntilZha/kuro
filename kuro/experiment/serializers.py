@@ -27,7 +27,7 @@ class ExperimentSerializer(serializers.HyperlinkedModelSerializer):
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Trial
-        fields = ('url', 'worker', 'experiment', 'started_at', 'ended_at')
+        fields = ('url', 'worker', 'experiment', 'started_at', 'complete')
 
 
 class WorkerSerializer(serializers.HyperlinkedModelSerializer):
@@ -40,6 +40,27 @@ class MetricSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Metric
         fields = ('url', 'name', 'mode')
+
+
+class TrialCompleteSerializer(serializers.Serializer):
+    trial = serializers.HyperlinkedRelatedField(
+        queryset=Trial.objects.all(),
+        view_name='trial-detail',
+        required=True
+    )
+
+
+class TrialGetOrCreateSerializer(serializers.Serializer):
+    worker = serializers.HyperlinkedRelatedField(
+        queryset=Worker.objects.all(),
+        view_name='worker-detail',
+        required=True
+    )
+    experiment = serializers.HyperlinkedRelatedField(
+        queryset=Experiment.objects.all(),
+        view_name='experiment-detail',
+        required=True
+    )
 
 
 class MetricGetOrCreateSerializer(serializers.Serializer):
@@ -71,3 +92,19 @@ class ResultValueSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = ResultValue
         fields = ('url', 'result', 'step', 'value')
+        depth = 1
+
+
+class ResultValueCreateSerializer(serializers.Serializer):
+    trial = serializers.HyperlinkedRelatedField(
+        required=True,
+        queryset=Trial.objects.all(),
+        view_name='trial-detail'
+    )
+    metric = serializers.HyperlinkedRelatedField(
+        required=True,
+        queryset=Metric.objects.all(),
+        view_name='metric-detail'
+    )
+    step = serializers.IntegerField(required=True)
+    value = serializers.FloatField(required=True)

@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 import json
 import os
 from collections import defaultdict, namedtuple
@@ -28,6 +28,10 @@ def get_gpu_list():
         return gpu_json
     except:
         return {'gpus': []}
+
+
+class TooManyTrials(Exception):
+    pass
 
 
 class KuroClient:
@@ -91,6 +95,31 @@ class KuroClient:
 
         return self.query(['experiments', 'get-or-create', 'create'], params=params)
 
+    def get_or_create_trial(self, worker_url, experiment_url):
+        return self.query(
+            ['trials', 'get-or-create', 'create'],
+            params={'worker': worker_url, 'experiment': experiment_url}
+        )
+
+    def create_result_value(self, trial_url, metric_url, step, value):
+        if step is None:
+            step = 0
+        return self.query(
+            ['result_values', 'report', 'create'],
+            params={
+                'trial': trial_url,
+                'metric': metric_url,
+                'step': step,
+                'value': value
+            }
+        )
+
+    def trial_complete(self, trial_url):
+        return self.query(
+            ['trials', 'complete', 'create'],
+            params={'trial': trial_url}
+        )
+
 
 class Experiment:
     def __init__(self, worker: 'Worker', group, identifier, hyper_parameters=None, metrics=None, n_trials=None):
@@ -112,6 +141,7 @@ class Experiment:
 
         self.metrics = {e['name']: Metric(e['url'], e['name'], e['mode']) for e in experiment['metrics']}
         self.n_trials = experiment['n_trials']
+        self.url = experiment['url']
 
     def _init_metrics(self, metrics):
         if metrics is None:
@@ -137,8 +167,11 @@ class Experiment:
             metric_lookup[name] = Metric(m['url'], m['name'], m['mode'])
         return metric_lookup
 
-    def trial(self) -> 'Trial':
-        return Trial(self.worker, self)
+    def trial(self) -> Optional['Trial']:
+        try:
+            return Trial(self.worker, self)
+        except TooManyTrials:
+            return None
 
 
 class Worker:
@@ -163,6 +196,7 @@ class Worker:
         self.cpu_brand = worker['cpu_brand']
         self.memory = worker['memory']
         self.gpus = worker['gpus']
+        self.url = worker['url']
 
     def experiment(self, group, identifier, hyper_parameters=None, metrics=None, n_trials=1) -> Experiment:
         return Experiment(
@@ -172,16 +206,28 @@ class Worker:
 
 class Trial:
     def __init__(self, worker: Worker, experiment: Experiment):
-        self.worker = worker
-        self.experiment = experiment
+        self.kuro_worker = worker
+        self.kuro_experiment = experiment
         self.client = worker.client
         self.results = defaultdict(list)
 
-    def report_metric(self, name, value, step=None, mode=None):
-        if name in self.experiment.metrics:
-            pass
-        else:
-            self.experiment._init_metrics({name: mode})
+        trial_instance = self.client.get_or_create_trial(worker.url, experiment.url)
+        if 'error' in trial_instance and trial_instance['error'] == 'TooManyTrials':
+            raise TooManyTrials()
+        self.url = trial_instance['url']
+        self.worker = trial_instance['worker']
+        self.experiment = trial_instance['experiment']
+        self.started_at = trial_instance['started_at']
+        self.complete = trial_instance['complete']
 
-    def complete(self):
-        pass
+    def report_metric(self, name, value, step=None, mode=None):
+        if name not in self.kuro_experiment.metrics:
+            metric = self.kuro_experiment._init_metrics({name: mode})[name]
+            self.kuro_experiment.metrics[name] = metric
+        else:
+            metric = self.kuro_experiment.metrics[name]
+
+        self.client.create_result_value(self.url, metric.url, step, value)
+
+    def end(self):
+        self.client.trial_complete(self.url)

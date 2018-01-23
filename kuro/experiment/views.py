@@ -3,13 +3,15 @@ from django.contrib.auth.models import User, Group
 from django.db import transaction
 
 from rest_framework import viewsets
+from rest_framework.decorators import detail_route
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from kuro.experiment.serializers import (
     UserSerializer, GroupSerializer, ExperimentSerializer,
     TrialSerializer, WorkerSerializer, MetricSerializer,
     ResultSerializer, ResultValueSerializer, MetricGetOrCreateSerializer,
-ExperimentGetOrCreateSerializer
+    ExperimentGetOrCreateSerializer, TrialGetOrCreateSerializer, ResultValueCreateSerializer,
+    TrialCompleteSerializer
 )
 from kuro.experiment.models import (
     Experiment, Trial, Worker, Metric, Result, ResultValue
@@ -34,6 +36,48 @@ class ExperimentViewSet(viewsets.ReadOnlyModelViewSet):
 class TrialViewSet(viewsets.ModelViewSet):
     queryset = Trial.objects.all()
     serializer_class = TrialSerializer
+
+
+class TrialCompleteViewSet(viewsets.GenericViewSet):
+    serializer_class = TrialCompleteSerializer
+
+    def create(self, request):
+        validated_trial = TrialCompleteSerializer(data=request.data)
+        if validated_trial.is_valid():
+            trial = validated_trial.validated_data['trial']
+            trial.complete = True
+            trial.save()
+            return Response(TrialSerializer(trial, context={'request': request}).data)
+        else:
+            return Response(validated_trial.errors, status=400)
+
+
+class TrialGetOrCreateViewSet(viewsets.GenericViewSet):
+    serializer_class = TrialGetOrCreateSerializer
+
+    @transaction.atomic
+    def create(self, request):
+        validated_trial = TrialGetOrCreateSerializer(data=request.data)
+        if validated_trial.is_valid():
+            worker = validated_trial.validated_data['worker']
+            experiment = validated_trial.validated_data['experiment']
+            trials = Trial.objects.filter(experiment=experiment).all()
+            if len(trials) < experiment.n_trials:
+                trial = Trial(worker=worker, experiment=experiment)
+                trial.save()
+            else:
+                trial = Trial.objects.filter(
+                    worker=worker, experiment=experiment, complete=False
+                ).first()
+                if trial is None:
+                    return Response({
+                        'message': f'n_trials={experiment.n_trials}, cannot create more',
+                        'error': 'TooManyTrials'
+                    })
+
+            return Response(TrialSerializer(trial, context={'request': request}).data)
+        else:
+            return Response(validated_trial.errors, status=400)
 
 
 class WorkerViewSet(viewsets.ModelViewSet):
@@ -77,7 +121,10 @@ class MetricGetOrCreateViewSet(viewsets.GenericViewSet):
             else:
                 if mode is not None and mode != 'auto' and metric.mode != mode:
                     return Response(
-                        data={'errors': f'Metric with name={name} exists but with mode={metric.mode} instead of the given mode={mode}'},
+                        data={
+                            'message': f'Metric with name={name} exists but with mode={metric.mode} instead of the given mode={mode}',
+                            'error': 'InvalidMode'
+                        },
                         status=400
                     )
                 else:
@@ -129,11 +176,38 @@ class ExperimentGetOrCreateViewSet(viewsets.GenericViewSet):
             return Response(validated_experiment.errors, status=400)
 
 
-class ResultViewSet(viewsets.ModelViewSet):
+class ResultViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Result.objects.all()
     serializer_class = ResultSerializer
 
 
-class ResultValueViewSet(viewsets.ModelViewSet):
+class ResultValueViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ResultValue.objects.all()
     serializer_class = ResultValueSerializer
+
+
+class ResultValueCreateViewSet(viewsets.GenericViewSet):
+    serializer_class = ResultValueCreateSerializer
+
+    @transaction.atomic
+    def create(self, request):
+        validated_result_value = ResultValueCreateSerializer(data=request.data, context={'request': request})
+        if validated_result_value.is_valid():
+            trial = validated_result_value.validated_data['trial']
+            metric = validated_result_value.validated_data['metric']
+            step = validated_result_value.validated_data['step']
+            value = validated_result_value.validated_data['value']
+            result = Result.objects.filter(trial=trial, metric=metric).first()
+            if result is None:
+                result = Result(trial=trial, metric=metric)
+                result.save()
+            result_value = ResultValue.objects.filter(result=result, step=step).first()
+            if result_value is None:
+                result_value = ResultValue(result=result, step=step, value=value)
+                result_value.save()
+            else:
+                result_value.value = value
+                result_value.save()
+            return Response(ResultValueSerializer(result_value, context={'request': request}).data)
+        else:
+            return Response(validated_result_value.errors, status=400)

@@ -44,7 +44,7 @@ class Trial(models.Model):
     worker = models.ForeignKey(Worker, models.CASCADE)
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE)
     started_at = models.DateTimeField(auto_now_add=True)
-    ended_at = models.DateTimeField(null=True)
+    complete = models.BooleanField(default=False)
 
     class Meta:
         ordering = ('experiment',)

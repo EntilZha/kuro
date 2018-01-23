@@ -6,12 +6,15 @@ def main():
     experiment = worker.experiment(
         'guesser', 'qanta.guesser.dan.DanGuesser',
         metrics=[('test_acc', 'max'), 'test_loss'],
-        hyper_parameters={'lr': .001} # Used to group models together and compare them
+        hyper_parameters={'lr': .001, 'dropout': .5} # Used to group models together and compare them
     )
 
     # Run 5 trials of same parameters
     for _ in range(5):
         trial = experiment.trial() # If worker doesn't have a trial for experiment make one, otherwise fetch it
+        # If there is nothing more to run, skip running a trial
+        if trial is None:
+            continue
         for step in range(10): # Steps can be epochs or batch steps etc
             acc, loss = 9 + step, -1 - step # Model results here from testing data
             trial.report_metric('test_acc', acc, step=step) # Explicitly pass step, no need for mode since it was passed in metrics
@@ -21,7 +24,7 @@ def main():
         trial.report_metric('final_metric', 98, mode='max') # similarly new metric needs mode
         trial.report_metric('final_nums', 93, mode='min')
         trial.report_metric('final_digits', 93, mode='min')
-        trial.complete() # Mark trial as complete
+        trial.end() # Mark trial as complete
 
 
 if __name__ == '__main__':
