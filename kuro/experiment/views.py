@@ -1,9 +1,11 @@
 import json
 from django.contrib.auth.models import User, Group
 from django.db import transaction
+from django.views.decorators.csrf import csrf_exempt
+from django.http.response import HttpResponse
+from django.shortcuts import render
 
 from rest_framework import viewsets
-from rest_framework.decorators import detail_route
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from kuro.experiment.serializers import (
@@ -16,6 +18,17 @@ from kuro.experiment.serializers import (
 from kuro.experiment.models import (
     Experiment, Trial, Worker, Metric, Result, ResultValue
 )
+from kuro.experiment.dash_app import dispatcher
+
+
+
+def dash(request, **kwargs):
+    return HttpResponse(dispatcher(request))
+
+
+@csrf_exempt
+def dash_ajax(request):
+    return HttpResponse(dispatcher(request), content_type='application/json')
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -197,6 +210,11 @@ class ResultValueCreateViewSet(viewsets.GenericViewSet):
             metric = validated_result_value.validated_data['metric']
             step = validated_result_value.validated_data['step']
             value = validated_result_value.validated_data['value']
+
+            experiment = trial.experiment
+            experiment.metrics.add(metric)
+            experiment.save()
+
             result = Result.objects.filter(trial=trial, metric=metric).first()
             if result is None:
                 result = Result(trial=trial, metric=metric)
