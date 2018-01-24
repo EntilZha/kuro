@@ -178,7 +178,7 @@ class Experiment:
 
 
 class Worker:
-    def __init__(self, name, server='http://localhost:8000'):
+    def __init__(self, name, server=KURO_SERVER):
         self.client = KuroClient(server=server)
         workers = self.client.list_workers()
         worker = None
