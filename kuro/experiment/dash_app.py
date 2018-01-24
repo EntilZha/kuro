@@ -3,47 +3,15 @@ from typing import Dict, List
 from random import randint
 from collections import defaultdict
 
+import numpy as np
+
 from kuro.experiment.models import Experiment, Trial
 
 import dash
+from dash.dependencies import Input, Output
 import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
-
-
-class MetricPlot:
-    def __init__(self, trial_id, name, mode, values, steps):
-        self.trial_id = trial_id
-        self.name = name
-        self.mode = mode
-        self.values = values
-        self.steps = steps
-
-    def to_plot(self):
-        return {
-            'name': f'Trial {self.trial_id}',
-            'mode': 'line',
-            'type': 'scatter',
-            'x': self.steps,
-            'y': self.values
-        }
-
-    @staticmethod
-    def to_figure(metric_plots):
-        metric_name = metric_plots[0].name
-        html_id = f'graph-metric-{metric_name}'
-        return dcc.Graph(
-        id=html_id,
-        figure={
-            'data': [m.to_plot() for m in metric_plots],
-            'layout': {
-                'title': f'Metric: {metric_name}',
-                'showlegend': True,
-                'xaxis': {'title': 'Step N'},
-                'yaxis': {'title': metric_name}
-            }
-        }
-    )
 
 
 def dispatcher(request):
@@ -52,7 +20,7 @@ def dispatcher(request):
     @param request: Request object
     '''
 
-    app = _create_app()
+    app = create_app()
     app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/bWLwgP.css"})
     params = {
         'data': request.body,
@@ -68,46 +36,104 @@ def dispatcher(request):
         return response.get_data()
 
 
-def _create_app():
-    ''' Creates dash application '''
+class MetricPlot:
+    def __init__(self, trial_id, name, mode, values, steps):
+        self.trial_id = trial_id
+        self.name = name
+        self.mode = mode
+        self.values = values
+        self.steps = steps
 
+    def to_plot(self, name=None, y=None):
+        return {
+            'name': f'Trial {self.trial_id}' if name is None else name,
+            'mode': 'line',
+            'type': 'scatter',
+            'x': self.steps,
+            'y': self.values if y is None else y
+        }
+
+    @staticmethod
+    def to_figure(metric_plots, aggregate_mode='all'):
+        metric_name = metric_plots[0].name
+        html_id = f'graph-metric-{metric_name}'
+        if aggregate_mode == 'all':
+            data = [m.to_plot() for m in metric_plots]
+        elif aggregate_mode == 'max':
+            series_max = [max(m.values) for m in metric_plots]
+            best_idx = np.argmax(series_max)
+            best_plot = metric_plots[best_idx].to_plot()
+            data = [best_plot]
+        elif aggregate_mode == 'avg':
+            stacked_series = np.vstack([m.values for m in metric_plots])
+            data = [metric_plots[0].to_plot(name='Trial Average', y=stacked_series.mean(axis=0))]
+        else:
+            raise ValueError('Invalid aggregate mode')
+
+        graph = dcc.Graph(
+            id=html_id,
+            figure={
+                'data': data,
+                'layout': {
+                    'title': f'Metric: {metric_name}',
+                    'showlegend': True,
+                    'xaxis': {'title': 'Step N'},
+                    'yaxis': {'title': metric_name}
+                }
+            }
+        )
+
+        return graph
+
+
+def create_app():
     app = dash.Dash(csrf_protect=False)
-    app.layout = html.Div(children=[
-        dcc.Location(id='url', refresh=False),
-        dcc.Link('Index', href='/dash-index'),
-        ', ',
-        dcc.Link('Figure 1', href='/dash-fig1'),
-        ', ',
-        dcc.Link('Figure 2', href='/dash-fig2'),
-        html.Br(),
-        html.Br(),
-        html.Div(id='content')
-    ])
+    app.layout = index()
+    app.title = 'Kuro Dashboard'
+
+
     @app.callback(
-        dash.dependencies.Output('content', 'children'),
-        [dash.dependencies.Input('url', 'pathname')]
+        Output('content', 'children'),
+        [Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
     )
-    def display_page(pathname):
-        ''' '''
-        if not pathname:
-            return ''
-        if pathname == '/':
-            return dash_index()
-        method = pathname[1:].replace('-', '_')
-        func = getattr(sys.modules[__name__], method, None)
-        if func and func.__name__.startswith('dash'):
-            return func()
-        return 'Unknown link'
+    def update_experiment_plot(experiment_ids, aggregate_mode):
+        return plot_experiment(int(experiment_ids[0]), aggregate_mode)
     return app
 
 
-def dash_index():
-    ''' '''
-    return 'Welcome to index page'
+def index():
+    experiments = Experiment.objects.all()
+    experiment_checkbox = html.Div(children=[
+        html.H5('Experiment Select'),
+        dcc.Checklist(
+        id='experiment-select',
+        options=[{'label': str(exp), 'value': exp.id} for exp in experiments],
+        values=[experiments[0].id]
+        )
+    ])
+    aggregate_mode = html.Div(children=[
+        html.H5('Trial Aggregate Mode'),
+        dcc.RadioItems(
+            id='aggregate-mode',
+            options=[
+                {'label': 'all', 'value': 'all'},
+                {'label': 'max', 'value': 'max'},
+                {'label': 'average', 'value': 'avg'}
+            ],
+            value='all'
+        )
+    ])
+    page = html.Div(children=[
+        aggregate_mode,
+        experiment_checkbox,
+        html.Div(id='content')
+    ])
+    return page
 
 
-def dash_fig1():
-    experiment = Experiment.objects.filter(id=7).first()
+
+def plot_experiment(experiment_id, aggregate_mode):
+    experiment = Experiment.objects.filter(id=experiment_id).first()
 
     step_metric_data: Dict[str, List[MetricPlot]] = defaultdict(list)
     summary_metric_data: Dict[str, List[MetricPlot]] = defaultdict(list)
@@ -125,43 +151,5 @@ def dash_fig1():
                 step_metric_data[metric_name].append(MetricPlot(trial.id, metric_name, metric_mode, values, steps))
 
 
-    return html.Div(children=[
-        MetricPlot.to_figure(plots)
-        for plots in step_metric_data.values()
-    ])
-
-
-def dash_fig2():
-    ''' '''
-    return dcc.Graph(
-        id='main-graph',
-        figure={
-            'data': [{
-                'name': 'Some name',
-                'mode': 'line',
-                'line': {
-                    'color': 'rgb(0, 0, 0)',
-                    'opacity': 1
-                },
-                'type': 'scatter',
-                'x': [randint(1, 100) for x in range(0, 20)],
-                'y': [randint(1, 100) for x in range(0, 20)]
-            }],
-            'layout': {
-                'autosize': True,
-                'scene': {
-                    'bgcolor': 'rgb(255, 255, 255)',
-                    'xaxis': {
-                        'titlefont': {'color': 'rgb(0, 0, 0)'},
-                        'title': 'X-AXIS',
-                        'color': 'rgb(0, 0, 0)'
-                    },
-                    'yaxis': {
-                        'titlefont': {'color': 'rgb(0, 0, 0)'},
-                        'title': 'Y-AXIS',
-                        'color': 'rgb(0, 0, 0)'
-                    }
-                }
-            }
-        }
-    )
+    plots = [MetricPlot.to_figure(plots, aggregate_mode=aggregate_mode) for plots in step_metric_data.values()]
+    return html.Div(children=plots)

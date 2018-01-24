@@ -2,12 +2,12 @@ from kuro import Worker
 import random
 
 
-def main():
+def run(guesser_name, hyper_parameters):
     worker = Worker('nibel')
     experiment = worker.experiment(
-        'guesser', 'qanta.guesser.dan.DanGuesser',
+        'guesser', guesser_name,
         metrics=[('test_acc', 'max'), 'test_loss'],
-        hyper_parameters={'lr': .001, 'dropout': .5},
+        hyper_parameters=hyper_parameters,
         n_trials=3# Used to group models together and compare them
     )
 
@@ -30,4 +30,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    run('qanta.guesser.dan.DanGuesser', {'lr': .001, 'dropout': .5})
+    run('qanta.guesser.rnn.RnnGuesser', {'lr': .1, 'dropout': .1})
