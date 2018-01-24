@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User, Group
-from kuro.experiment.models import (
+from kuro.web.models import (
     Experiment, Worker, Trial, Metric, Result, ResultValue
 )
 from rest_framework import serializers

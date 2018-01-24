@@ -3,7 +3,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from kuro.experiment.models import Experiment
+from kuro.web.models import Experiment
 
 import dash
 from dash.dependencies import Input, Output

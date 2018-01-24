@@ -188,7 +188,7 @@ class Worker:
             cpu_brand = cpu_data['brand'] if 'brand' in cpu_data else ''
             memory = psutil.virtual_memory().total / 1073741824
             gpus = json.dumps(get_gpu_list())
-            worker = self.client.create_worker(self.name, cpu_brand, memory, gpus)
+            worker = self.client.create_worker(name, cpu_brand, memory, gpus)
 
         self.name = worker['name']
         self.created_at = worker['created_at']

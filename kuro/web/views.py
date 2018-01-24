@@ -8,17 +8,17 @@ from django.shortcuts import render
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
-from kuro.experiment.serializers import (
+from kuro.web.serializers import (
     UserSerializer, GroupSerializer, ExperimentSerializer,
     TrialSerializer, WorkerSerializer, MetricSerializer,
     ResultSerializer, ResultValueSerializer, MetricGetOrCreateSerializer,
     ExperimentGetOrCreateSerializer, TrialGetOrCreateSerializer, ResultValueCreateSerializer,
     TrialCompleteSerializer
 )
-from kuro.experiment.models import (
+from kuro.web.models import (
     Experiment, Trial, Worker, Metric, Result, ResultValue
 )
-from kuro.experiment.dash_app import dispatcher
+from kuro.web.dash_app import dispatcher
 
 
 

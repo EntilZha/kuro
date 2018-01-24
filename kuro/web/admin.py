@@ -1,5 +1,5 @@
 from django.contrib import admin
-from kuro.experiment.models import Worker, Metric, Experiment, Trial, Result, ResultValue
+from kuro.web.models import Worker, Metric, Experiment, Trial, Result, ResultValue
 
 
 class WorkerAdmin(admin.ModelAdmin):
