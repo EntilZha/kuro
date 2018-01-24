@@ -88,9 +88,10 @@ The results are displayed at `http://localhost:8000/dash-index`
 
 ### Configuration
 
-The host can be changed at the worker initialization `Worker('nibel', server='http://myserver.com/')` or by setting the
+The host used by the client can be changed at the worker initialization `Worker('nibel', server='http://myserver.com/')` or by setting the
 environment variable `KURO_SERVER=http://myserver.com/`
 
+On the server you also need to specify `KURO_HOST=myserver.com` (hostname) as this will be passed to django's `ALLOWED_HOSTS`. This is needed if you intend to run the server with something like `python manage.py runserver 0.0.0.0:8000` to expose it to the open web
 
 ### Developer Notes
 

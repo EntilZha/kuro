@@ -26,6 +26,9 @@ SECRET_KEY = 's!42pz%k%a7qoer81831a&f+6o^91ntuz$0nku_v0vnry8w%v@'
 DEBUG = True
 
 ALLOWED_HOSTS = []
+KURO_HOST = os.environ.get('KURO_HOST')
+if KURO_HOST is not None:
+    ALLOWED_HOSTS.append(KURO_HOST)
 
 
 # Application definition
