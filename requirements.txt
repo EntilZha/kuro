@@ -6,3 +6,4 @@ coreapi-cli
 py-cpuinfo
 psutil
 gpustat
+numpy
