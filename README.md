@@ -22,7 +22,7 @@ Below is a sample of what using the client library looks like from `demo.py`:
 
 Start the kuro server
 
-```python
+```bash
 $ python manage.py migrate
 $ python manage.py runserver
 ```
@@ -73,3 +73,6 @@ The results are in dashboard at `http://localhost:8000/dash-index`
 ![Dashboard Bottom half](https://imgur.com/download/pUq5RPH)
 
 At some point in the future, the following features are planned
+
+* Central server maintaining queue of work, and Workers being able to request work from the central server
+* Paired with this feature would be automatic hyper parameter tuning
