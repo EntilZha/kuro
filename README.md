@@ -1,12 +1,12 @@
 # kuro
 
 Kuro is a python-based experiment management system developed by [Pedro Rodriguez](https://pedrorodriguez.io), a PhD Candidate in
-machine learning at University of Maryland, College Park.
+machine learning and natural language processing at the [University of Maryland, College Park](http://www.cs.umd.edu/).
 
 Kuro is focused on:
 
 * Providing a client library that can be used from experiment code to log metrics such as accuracy and loss.
-* Providing a django web application to store information sent from the client library.
+* Providing a [django](https://www.djangoproject.com/) web application to store information sent from the client library.
 * Providing a [Dash](https://plot.ly/products/dash/) app that visualizes the results of experiments.
 
 This is all aimed at making it easy to:
@@ -18,7 +18,18 @@ This is all aimed at making it easy to:
     * Handling either time series data (accuracy by epoch) or summary data (best accuracy)
     * Analyze either with a web visualization based on Dash, or raw JSON data for scripts (eg scripts converting data to publication ready plots)
 
+## Installation
+
+```bash
+$ pip install -r requirements.txt
+```
+
+## Example Usage
+
 Below is a sample of what using the client library looks like from `demo.py`:
+
+
+### Run Kuro Server
 
 Start the kuro server
 
@@ -27,7 +38,7 @@ $ python manage.py migrate
 $ python manage.py runserver
 ```
 
-Run a dummy experiment
+### Run a dummy experiment
 
 ```python
 from kuro import Worker
@@ -66,13 +77,26 @@ if __name__ == '__main__':
     run('qanta.guesser.rnn.RnnGuesser', {'lr': .1, 'dropout': .1})
 ```
 
-The results are in dashboard at `http://localhost:8000/dash-index`
+### Viewing Results
+
+The results are displayed at `http://localhost:8000/dash-index`
 
 ![Dashboard Top Half](https://imgur.com/download/hWGog4L)
 
 ![Dashboard Bottom half](https://imgur.com/download/pUq5RPH)
 
-At some point in the future, the following features are planned
+
+### Developer Notes
+
+Kuro uses the [django rest framework](http://www.django-rest-framework.org/) for most of its heavy lifting. The endpoints
+for the rest framework in kuro are at:
+
+* Schema: `/schema/`
+* API Explorer: `/api/v1.0/`
+* Django Admin: `/admin/`
+
+
+### Future Features
 
 * Central server maintaining queue of work, and Workers being able to request work from the central server
 * Paired with this feature would be automatic hyper parameter tuning
