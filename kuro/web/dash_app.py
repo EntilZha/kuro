@@ -1,9 +1,9 @@
 from typing import Dict, List, Tuple
 from collections import defaultdict
 
-import numpy as np
-
 from kuro.web.models import Experiment
+
+import numpy as np
 
 import dash
 from dash.dependencies import Input, Output
@@ -33,7 +33,7 @@ def dispatcher(request):
         return response.get_data()
 
 
-class MetricPlot:
+class MetricSeries:
     def __init__(self, experiment_id, trial_id, name, mode, values, steps):
         self.experiment_id = experiment_id
         self.trial_id = trial_id
@@ -97,26 +97,69 @@ def create_app():
     app.layout = index()
     app.title = 'Kuro Dashboard'
 
+    @app.callback(
+        Output('experiment-select-div', 'children'),
+        [Input('group-select', 'value')]
+    )
+    def update_experiment_div(group):
+        return create_experiment_div(group)
 
     @app.callback(
         Output('content', 'children'),
         [Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
     )
     def update_experiment_plot(experiment_ids, aggregate_mode):
-        return plot_experiments([int(exp_id) for exp_id in experiment_ids], aggregate_mode)
+        if len(experiment_ids) == 0:
+            return html.H5('No Experiments Selected')
+        experiment_ids = [int(exp_id) for exp_id in experiment_ids]
+        step_metric_data, summary_metric_data = create_metric_series(experiment_ids)
+        return html.Div(children=[
+            experiment_table(summary_metric_data, step_metric_data),
+            plot_experiments(step_metric_data, aggregate_mode)
+        ])
+
     return app
 
 
-def index():
-    experiments = Experiment.objects.all()
-    experiment_checkbox = html.Div(children=[
-        html.H5('Experiment Select'),
-        dcc.Checklist(
+def create_experiment_div(group):
+    experiments = Experiment.objects.filter(group=group)
+    experiment_checkbox = dcc.Checklist(
         id='experiment-select',
         options=[{'label': str(exp), 'value': exp.id} for exp in experiments],
-        values=[experiments[0].id]
+        values=[exp.id for exp in experiments]
+    )
+    return html.Div(children=[
+        html.H5('Experiment Select'),
+        experiment_checkbox
+    ])
+
+dashboard_info_text = '''
+### Kuro Dashboard Guide
+
+* One experiment `group` can be selected at a time. For example `guesser` experiments
+* Each group can have any number of experiments
+* Each experiment is represented by its unique grouping of group, identifier (name), and json serialized hyper parameters
+* Each experiment can have one more more trials which represent a single run of that experiment and its parameters
+* Each trial can have one or more metrics such as accuracy, loss, etc.
+* Each metric can be time series (eg accuracy over epochs), or a single "summary" metric.
+* Each time series metric has its best value (min or max) displayed in the table of trials
+* Trial Aggregate Mode controls how trials are displayed: all of them, the trial with the best metric at any point in the series, or the mean of each metric at each time step
+'''
+
+
+def index():
+    info = dcc.Markdown(dashboard_info_text)
+    groups = {e[0] for e in Experiment.objects.values_list('group')}
+    initial_group = next(iter(groups))
+    group_selector = html.Div(children=[
+        html.H5('Group Selector'),
+        dcc.RadioItems(
+            id='group-select',
+            options=[{'label': g, 'value': g} for g in groups],
+            value=initial_group
         )
     ])
+    experiment_checkbox = html.Div(id='experiment-select-div', children=create_experiment_div(initial_group))
     aggregate_mode = html.Div(children=[
         html.H5('Trial Aggregate Mode'),
         dcc.RadioItems(
@@ -130,6 +173,8 @@ def index():
         )
     ])
     page = html.Div(children=[
+        info,
+        group_selector,
         aggregate_mode,
         experiment_checkbox,
         html.Div(id='content')
@@ -137,9 +182,12 @@ def index():
     return page
 
 
-def plot_experiments(experiment_ids, aggregate_mode, experiment_same_plot=True):
-    step_metric_data: Dict[Tuple[int, str], List[MetricPlot]] = defaultdict(list)
-    summary_metric_data: Dict[Tuple[int, str], List[MetricPlot]] = defaultdict(list)
+MetricData = Dict[Tuple[int, str], List[MetricSeries]]
+
+
+def create_metric_series(experiment_ids):
+    step_metric_data: MetricData = defaultdict(list)
+    summary_metric_data: MetricData = defaultdict(list)
 
     for experiment in Experiment.objects.filter(id__in=experiment_ids):
         for trial in experiment.trials.all():
@@ -150,20 +198,63 @@ def plot_experiments(experiment_ids, aggregate_mode, experiment_same_plot=True):
                 steps = [v.step for v in result_values]
                 values = [v.value for v in result_values]
                 if len(steps) == 1:
-                    summary_metric_data[(experiment.id, metric_name)].append(MetricPlot(
+                    summary_metric_data[(experiment.id, metric_name)].append(MetricSeries(
                         experiment.id, trial.id, metric_name, metric_mode, values, steps
                     ))
                 else:
-                    step_metric_data[(experiment.id, metric_name)].append(MetricPlot(
+                    step_metric_data[(experiment.id, metric_name)].append(MetricSeries(
                         experiment.id, trial.id, metric_name, metric_mode, values, steps
                     ))
 
+    return step_metric_data, summary_metric_data
+
+
+def extract_metric_series_value(metric: MetricSeries):
+    if len(metric.values) == 1:
+        return metric.values[0]
+    elif len(metric.values) == 0:
+        raise ValueError('Missing metric values')
+    else:
+        if metric.mode == 'max':
+            return max(metric.values)
+        elif metric.mode == 'min':
+            return min(metric.values)
+        else:
+            raise ValueError('Invalid mode, must be max or min')
+
+
+def experiment_table(summary_metric_data: MetricData, step_metric_data: MetricData):
+    exp_trial_lookup = defaultdict(list)
+    for ms_list in summary_metric_data.values():
+        for ms in ms_list:
+            exp_trial_lookup[(ms.experiment_id, ms.trial_id)].append(ms)
+
+    for ms_list in step_metric_data.values():
+        for ms in ms_list:
+            exp_trial_lookup[(ms.experiment_id, ms.trial_id)].append(ms)
+
+    for key in exp_trial_lookup.keys():
+        exp_trial_lookup[key].sort(key=lambda ms: ms.name)
+
+    metric_names = [ms.name for ms in next(iter(exp_trial_lookup.values()))]
+
+    table = html.Table(
+        [html.Tr([html.Th('Experiment'), html.Th('Trial')] + [html.Th(col) for col in metric_names])] +
+        [html.Tr(
+            [html.Td(ms_list[0].experiment_id), html.Td(ms_list[0].trial_id)] +
+            [html.Td(extract_metric_series_value(ms)) for ms in ms_list]
+        ) for ms_list in exp_trial_lookup.values()]
+    )
+    return html.Div(children=[html.H5('Summary Metrics'), table])
+
+
+def plot_experiments(step_metric_data, aggregate_mode, experiment_same_plot=True):
     if experiment_same_plot:
         plot_lookup = defaultdict(list)
         for metric_plot_list in step_metric_data.values():
             for metric_plot in metric_plot_list:
                 plot_lookup[metric_plot.name].append(metric_plot)
-        plots = [MetricPlot.to_figure(plots, aggregate_mode=aggregate_mode) for plots in plot_lookup.values()]
+        plots = [MetricSeries.to_figure(plots, aggregate_mode=aggregate_mode) for plots in plot_lookup.values()]
     else:
-        plots = [MetricPlot.to_figure(plots, aggregate_mode=aggregate_mode) for plots in step_metric_data.values()]
+        plots = [MetricSeries.to_figure(plots, aggregate_mode=aggregate_mode) for plots in step_metric_data.values()]
     return html.Div(children=plots)
