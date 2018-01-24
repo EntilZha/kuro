@@ -150,9 +150,15 @@ dashboard_info_text = '''
 def index():
     info = dcc.Markdown(dashboard_info_text)
     groups = {e[0] for e in Experiment.objects.values_list('group')}
-    initial_group = next(iter(groups))
+    if len(groups) == 0:
+        groups = {'empty'}
+        initial_group = 'empty'
+    else:
+        initial_group = next(iter(groups))
+
     group_selector = html.Div(children=[
         html.H5('Group Selector'),
+        html.Div(children='There are no experiments and thus no groups, please add some' if initial_group =='empty' else ''),
         dcc.RadioItems(
             id='group-select',
             options=[{'label': g, 'value': g} for g in groups],
