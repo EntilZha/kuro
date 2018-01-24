@@ -1,17 +1,14 @@
-import sys
-from typing import Dict, List
-from random import randint
+from typing import Dict, List, Tuple
 from collections import defaultdict
 
 import numpy as np
 
-from kuro.experiment.models import Experiment, Trial
+from kuro.experiment.models import Experiment
 
 import dash
 from dash.dependencies import Input, Output
 import dash_core_components as dcc
 import dash_html_components as html
-import plotly.graph_objs as go
 
 
 def dispatcher(request):
@@ -37,7 +34,8 @@ def dispatcher(request):
 
 
 class MetricPlot:
-    def __init__(self, trial_id, name, mode, values, steps):
+    def __init__(self, experiment_id, trial_id, name, mode, values, steps):
+        self.experiment_id = experiment_id
         self.trial_id = trial_id
         self.name = name
         self.mode = mode
@@ -46,7 +44,7 @@ class MetricPlot:
 
     def to_plot(self, name=None, y=None):
         return {
-            'name': f'Trial {self.trial_id}' if name is None else name,
+            'name': f'Experiment {self.experiment_id}, Trial {self.trial_id}' if name is None else name,
             'mode': 'line',
             'type': 'scatter',
             'x': self.steps,
@@ -56,7 +54,8 @@ class MetricPlot:
     @staticmethod
     def to_figure(metric_plots, aggregate_mode='all'):
         metric_name = metric_plots[0].name
-        html_id = f'graph-metric-{metric_name}'
+        experiment_id = metric_plots[0].experiment_id
+        html_id = f'graph-experiment-{experiment_id}-metric-{metric_name}'
         if aggregate_mode == 'all':
             data = [m.to_plot() for m in metric_plots]
         elif aggregate_mode == 'max':
@@ -97,7 +96,7 @@ def create_app():
         [Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
     )
     def update_experiment_plot(experiment_ids, aggregate_mode):
-        return plot_experiment(int(experiment_ids[0]), aggregate_mode)
+        return plot_experiments([int(exp_id) for exp_id in experiment_ids], aggregate_mode)
     return app
 
 
@@ -131,25 +130,33 @@ def index():
     return page
 
 
+def plot_experiments(experiment_ids, aggregate_mode, experiment_same_plot=True):
+    step_metric_data: Dict[Tuple[int, str], List[MetricPlot]] = defaultdict(list)
+    summary_metric_data: Dict[Tuple[int, str], List[MetricPlot]] = defaultdict(list)
 
-def plot_experiment(experiment_id, aggregate_mode):
-    experiment = Experiment.objects.filter(id=experiment_id).first()
+    for experiment in Experiment.objects.filter(id__in=experiment_ids):
+        for trial in experiment.trials.all():
+            for r in trial.results.all():
+                metric_name = r.metric.name
+                metric_mode = r.metric.mode
+                result_values = r.result_values.all()
+                steps = [v.step for v in result_values]
+                values = [v.value for v in result_values]
+                if len(steps) == 1:
+                    summary_metric_data[(experiment.id, metric_name)].append(MetricPlot(
+                        experiment.id, trial.id, metric_name, metric_mode, values, steps
+                    ))
+                else:
+                    step_metric_data[(experiment.id, metric_name)].append(MetricPlot(
+                        experiment.id, trial.id, metric_name, metric_mode, values, steps
+                    ))
 
-    step_metric_data: Dict[str, List[MetricPlot]] = defaultdict(list)
-    summary_metric_data: Dict[str, List[MetricPlot]] = defaultdict(list)
-
-    for trial in experiment.trials.all():
-        for r in trial.results.all():
-            metric_name = r.metric.name
-            metric_mode = r.metric.mode
-            result_values = r.result_values.all()
-            steps = [v.step for v in result_values]
-            values = [v.value for v in result_values]
-            if len(steps) == 1:
-                summary_metric_data[metric_name].append(MetricPlot(trial.id, metric_name, metric_mode, values, steps))
-            else:
-                step_metric_data[metric_name].append(MetricPlot(trial.id, metric_name, metric_mode, values, steps))
-
-
-    plots = [MetricPlot.to_figure(plots, aggregate_mode=aggregate_mode) for plots in step_metric_data.values()]
+    if experiment_same_plot:
+        plot_lookup = defaultdict(list)
+        for metric_plot_list in step_metric_data.values():
+            for metric_plot in metric_plot_list:
+                plot_lookup[metric_plot.name].append(metric_plot)
+        plots = [MetricPlot.to_figure(plots, aggregate_mode=aggregate_mode) for plots in plot_lookup.values()]
+    else:
+        plots = [MetricPlot.to_figure(plots, aggregate_mode=aggregate_mode) for plots in step_metric_data.values()]
     return html.Div(children=plots)
