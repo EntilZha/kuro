@@ -9,6 +9,9 @@ import psutil
 from gpustat import GPUStatCollection
 
 
+KURO_SERVER = os.environ.get('KURO_SERVER', 'http://localhost:8000')
+
+
 Metric = namedtuple('Metric', ['url', 'name', 'mode'])
 
 
@@ -35,8 +38,8 @@ class TooManyTrials(Exception):
 
 
 class KuroClient:
-    def __init__(self, endpoint: str='http://localhost:8000'):
-        self.schema_endpoint = os.path.join(endpoint, 'schema')
+    def __init__(self, server=KURO_SERVER):
+        self.schema_endpoint = os.path.join(server, 'schema')
         self.client = coreapi.Client()
         self.schema = self.client.get(self.schema_endpoint)
 
@@ -175,8 +178,8 @@ class Experiment:
 
 
 class Worker:
-    def __init__(self, name, endpoint='http://localhost:8000'):
-        self.client = KuroClient(endpoint=endpoint)
+    def __init__(self, name, server='http://localhost:8000'):
+        self.client = KuroClient(server=server)
         workers = self.client.list_workers()
         worker = None
         for w in workers:

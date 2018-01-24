@@ -86,6 +86,12 @@ The results are displayed at `http://localhost:8000/dash-index`
 ![Dashboard Bottom half](https://imgur.com/download/pUq5RPH)
 
 
+### Configuration
+
+The host can be changed at the worker initialization `Worker('nibel', server='http://myserver.com/')` or by setting the
+environment variable `KURO_SERVER=http://myserver.com/`
+
+
 ### Developer Notes
 
 Kuro uses the [django rest framework](http://www.django-rest-framework.org/) for most of its heavy lifting. The endpoints
