@@ -58,14 +58,21 @@ class MetricPlot:
         html_id = f'graph-experiment-{experiment_id}-metric-{metric_name}'
         if aggregate_mode == 'all':
             data = [m.to_plot() for m in metric_plots]
-        elif aggregate_mode == 'max':
-            series_max = [max(m.values) for m in metric_plots]
-            best_idx = np.argmax(series_max)
-            best_plot = metric_plots[best_idx].to_plot()
-            data = [best_plot]
-        elif aggregate_mode == 'avg':
-            stacked_series = np.vstack([m.values for m in metric_plots])
-            data = [metric_plots[0].to_plot(name='Trial Average', y=stacked_series.mean(axis=0))]
+        elif aggregate_mode == 'max' or aggregate_mode == 'avg':
+            experiment_plots = defaultdict(list)
+            for m in metric_plots:
+                experiment_plots[m.experiment_id].append(m)
+            data = []
+            if aggregate_mode == 'max':
+                for exp_metric_plots in experiment_plots.values():
+                    series_max = [max(m.values) for m in exp_metric_plots]
+                    best_idx = np.argmax(series_max)
+                    best_plot = exp_metric_plots[best_idx].to_plot()
+                    data.append(best_plot)
+            else:
+                for exp_metric_plots in experiment_plots.values():
+                    stacked_series = np.vstack([m.values for m in exp_metric_plots])
+                    data.append(exp_metric_plots[0].to_plot(name='Trial Average', y=stacked_series.mean(axis=0)))
         else:
             raise ValueError('Invalid aggregate mode')
 
