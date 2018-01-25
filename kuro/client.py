@@ -10,6 +10,8 @@ from gpustat import GPUStatCollection
 
 
 KURO_SERVER = os.environ.get('KURO_SERVER', 'http://localhost:8000')
+if len(KURO_SERVER) == 0:
+    KURO_SERVER = 'http://localhost:8000'
 
 
 Metric = namedtuple('Metric', ['url', 'name', 'mode'])
