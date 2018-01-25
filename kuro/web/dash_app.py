@@ -9,6 +9,7 @@ import dash
 from dash.dependencies import Input, Output
 import dash_core_components as dcc
 import dash_html_components as html
+import dash_table_experiments as dt
 
 
 def dispatcher(request):
@@ -113,10 +114,16 @@ def create_app():
             return html.H5('No Experiments Selected')
         experiment_ids = [int(exp_id) for exp_id in experiment_ids]
         step_metric_data, summary_metric_data = create_metric_series(experiment_ids)
-        return html.Div(children=[
-            experiment_table(summary_metric_data, step_metric_data),
-            plot_experiments(step_metric_data, aggregate_mode)
-        ])
+        return html.Div(plot_experiments(step_metric_data, aggregate_mode))
+
+    @app.callback(
+        Output('experiment-table', 'rows'),
+        [Input('interval-component', 'n_intervals'), Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
+    )
+    def update_experiment_table(n_intervals, experiment_ids, aggregate_mode):
+        experiment_ids = [int(exp_id) for exp_id in experiment_ids]
+        step_metric_data, summary_metric_data = create_metric_series(experiment_ids)
+        return experiment_table(summary_metric_data, step_metric_data)
 
     return app
 
@@ -178,12 +185,18 @@ def index():
             value='all'
         )
     ])
+    experiment_table = dt.DataTable(
+        rows=[{}], id='experiment-table',
+        selected_row_indices=[], row_selectable=True, filterable=True, sortable=True
+    )
     page = html.Div(children=[
         dcc.Interval(id='interval-component', interval=30 * 1000, n_intervals=0),
         info,
         group_selector,
         aggregate_mode,
         experiment_checkbox,
+        html.H5('Experiment Summary Table'),
+        experiment_table,
         html.Div(id='content')
     ])
     return page
@@ -229,30 +242,35 @@ def extract_metric_series_value(metric: MetricSeries):
         else:
             raise ValueError('Invalid mode, must be max or min')
 
-
 def experiment_table(summary_metric_data: MetricData, step_metric_data: MetricData):
-    exp_trial_lookup = defaultdict(list)
+    metric_names = set()
     for ms_list in summary_metric_data.values():
         for ms in ms_list:
-            exp_trial_lookup[(ms.experiment_id, ms.trial_id)].append(ms)
+            metric_names.add(ms.name)
 
     for ms_list in step_metric_data.values():
         for ms in ms_list:
-            exp_trial_lookup[(ms.experiment_id, ms.trial_id)].append(ms)
+            metric_names.add(ms.name)
 
-    for key in exp_trial_lookup.keys():
-        exp_trial_lookup[key].sort(key=lambda ms: ms.name)
+    exp_trial_lookup = defaultdict(dict)
+    for ms_list in summary_metric_data.values():
+        for ms in ms_list:
+            exp_trial_lookup[(ms.experiment_id, ms.trial_id)][ms.name] = ms
+    for ms_list in step_metric_data.values():
+        for ms in ms_list:
+            exp_trial_lookup[(ms.experiment_id, ms.trial_id)][ms.name] = ms
 
-    metric_names = [ms.name for ms in next(iter(exp_trial_lookup.values()))]
+    rows = []
+    for (experiment_id, trial_id), metric_dict in exp_trial_lookup.items():
+        r = {'experiment_id': experiment_id, 'trial_id': trial_id}
+        for name in metric_names:
+            if name in metric_dict:
+                r[name] = extract_metric_series_value(metric_dict[name])
+            else:
+                r[name] = None
+        rows.append(r)
 
-    table = html.Table(
-        [html.Tr([html.Th('Experiment'), html.Th('Trial')] + [html.Th(col) for col in metric_names])] +
-        [html.Tr(
-            [html.Td(ms_list[0].experiment_id), html.Td(ms_list[0].trial_id)] +
-            [html.Td(extract_metric_series_value(ms)) for ms in ms_list]
-        ) for ms_list in exp_trial_lookup.values()]
-    )
-    return html.Div(children=[html.H5('Summary Metrics'), table])
+    return rows
 
 
 def plot_experiments(step_metric_data, aggregate_mode, experiment_same_plot=True):
