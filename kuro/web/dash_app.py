@@ -99,16 +99,16 @@ def create_app():
 
     @app.callback(
         Output('experiment-select-div', 'children'),
-        [Input('group-select', 'value')]
+        [Input('interval-component', 'n_intervals'), Input('group-select', 'value')]
     )
-    def update_experiment_div(group):
+    def update_experiment_div(n_intervals, group):
         return create_experiment_div(group)
 
     @app.callback(
         Output('content', 'children'),
-        [Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
+        [Input('interval-component', 'n_intervals'), Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
     )
-    def update_experiment_plot(experiment_ids, aggregate_mode):
+    def update_experiment_plot(n_intervals, experiment_ids, aggregate_mode):
         if len(experiment_ids) == 0:
             return html.H5('No Experiments Selected')
         experiment_ids = [int(exp_id) for exp_id in experiment_ids]
@@ -179,6 +179,7 @@ def index():
         )
     ])
     page = html.Div(children=[
+        dcc.Interval(id='interval-component', interval=30 * 1000, n_intervals=0),
         info,
         group_selector,
         aggregate_mode,
