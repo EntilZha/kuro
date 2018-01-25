@@ -55,8 +55,8 @@ class KuroClient:
             params={'name': name, 'cpu_brand': cpu_brand, 'memory': memory, 'gpus': gpus, 'active': True}
         )
 
-    def get_or_create_experiment(self, group, identifier, hyper_parameters, metrics: Dict[str, str], n_trials=1):
-        pass
+    def get_trial(self, trial_id):
+        return self.query(['trials', 'read'], params={'id': trial_id})
 
     def list_metrics(self, name=None):
         metrics = self.query(['metrics', 'list'])
@@ -172,7 +172,7 @@ class Experiment:
 
     def trial(self) -> Optional['Trial']:
         try:
-            return Trial(self.worker, self)
+            return Trial.from_worker_experiment(self.worker, self)
         except TooManyTrials:
             return None
 
@@ -208,21 +208,17 @@ class Worker:
 
 
 class Trial:
-    def __init__(self, worker: Worker, experiment: Experiment):
-        self.kuro_worker = worker
-        self.kuro_experiment = experiment
-        self.client = worker.client
-        self.results = defaultdict(list)
-
-        trial_instance = self.client.get_or_create_trial(worker.url, experiment.url)
-        if 'error' in trial_instance and trial_instance['error'] == 'TooManyTrials':
-            raise TooManyTrials()
-        self.url = trial_instance['url']
-        self.worker = trial_instance['worker']
-        self.experiment = trial_instance['experiment']
-        self.started_at = trial_instance['started_at']
-        self.complete = trial_instance['complete']
-
+    def __init__(self):
+        self.kuro_worker = None
+        self.kuro_experiment = None
+        self.client = None
+        self.results = None
+        self.url = None
+        self.id = None
+        self.worker = None
+        self.experiment = None
+        self.started_at = None
+        self.complete = None
     def report_metric(self, name, value, step=None, mode=None):
         if name not in self.kuro_experiment.metrics:
             metric = self.kuro_experiment._init_metrics({name: mode})[name]
@@ -234,3 +230,50 @@ class Trial:
 
     def end(self):
         self.client.trial_complete(self.url)
+
+    @classmethod
+    def from_worker_experiment(cls, worker: Worker, experiment: Experiment):
+        trial = cls()
+        trial.kuro_worker = worker
+        trial.kuro_experiment = experiment
+        trial.client = worker.client
+        trial.results = defaultdict(list)
+
+        trial_instance = trial.client.get_or_create_trial(worker.url, experiment.url)
+        if 'error' in trial_instance and trial_instance['error'] == 'TooManyTrials':
+            raise TooManyTrials()
+        trial.url = trial_instance['url']
+        trial.id = trial_instance['id']
+        trial.worker = trial_instance['worker']
+        trial.experiment = trial_instance['experiment']
+        trial.started_at = trial_instance['started_at']
+        trial.complete = trial_instance['complete']
+        return trial
+
+    @classmethod
+    def from_trial_id(cls, trial_id):
+        client = KuroClient()
+        trial_instance = client.get_trial(trial_id)
+        worker = Worker(trial_instance['worker']['name'])
+        experiment_instance = trial_instance['experiment']
+        experiment = Experiment(
+            worker,
+            experiment_instance['group'],
+            experiment_instance['identifier'],
+            hyper_parameters=experiment_instance['hyper_parameters']
+        )
+
+        trial = cls()
+        trial.kuro_worker = worker
+        trial.kuro_experiment = experiment
+        trial.client = worker.client
+        trial.results = defaultdict(list)
+        trial.trial_instance = trial_instance
+        trial.url = trial_instance['url']
+        trial.id = trial_instance['id']
+        trial.worker = trial_instance['worker']
+        trial.experiment = trial_instance['experiment']
+        trial.started_at = trial_instance['started_at']
+        trial.complete = trial_instance['complete']
+
+        return trial

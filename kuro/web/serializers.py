@@ -8,38 +8,39 @@ from rest_framework import serializers
 class UserSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = User
-        fields = ('url', 'username', 'email', 'groups')
+        fields = ('id', 'url', 'username', 'email', 'groups')
 
 
 class GroupSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Group
-        fields = ('url', 'name')
+        fields = ('id', 'url', 'name')
 
 
 class ExperimentSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Experiment
-        fields = ('url', 'group', 'identifier', 'hyper_parameters', 'metrics', 'n_trials')
+        fields = ('id', 'url', 'group', 'identifier', 'hyper_parameters', 'metrics', 'n_trials')
         depth = 1
 
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Trial
-        fields = ('url', 'worker', 'experiment', 'started_at', 'complete')
+        fields = ('id', 'url', 'worker', 'experiment', 'started_at', 'complete')
+        depth = 1
 
 
 class WorkerSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Worker
-        fields = ('url', 'name', 'created_at', 'active', 'cpu_brand', 'memory', 'gpus')
+        fields = ('id', 'url', 'name', 'created_at', 'active', 'cpu_brand', 'memory', 'gpus')
 
 
 class MetricSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Metric
-        fields = ('url', 'name', 'mode')
+        fields = ('id', 'url', 'name', 'mode')
 
 
 class TrialCompleteSerializer(serializers.Serializer):
