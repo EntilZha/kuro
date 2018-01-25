@@ -168,7 +168,7 @@ class ExperimentGetOrCreateViewSet(viewsets.GenericViewSet):
             ).first()
             if experiment is None:
                 if n_trials is None:
-                    del data['n_trials']
+                    data['n_trials'] = 1
                 data['hyper_parameters'] = str_hyper_parameters
 
                 experiment_serializer = ExperimentSerializer(data=data, context={'request': request})

@@ -103,7 +103,7 @@ def create_app():
         [Input('interval-component', 'n_intervals'), Input('group-select', 'value')]
     )
     def update_experiment_div(n_intervals, group):
-        return create_experiment_div(group)
+        return experiment_div(group)
 
     @app.callback(
         Output('content', 'children'),
@@ -128,7 +128,7 @@ def create_app():
     return app
 
 
-def create_experiment_div(group):
+def experiment_div(group):
     experiments = Experiment.objects.filter(group=group)
     experiment_checkbox = dcc.Checklist(
         id='experiment-select',
@@ -172,7 +172,7 @@ def index():
             value=initial_group
         )
     ])
-    experiment_checkbox = html.Div(id='experiment-select-div', children=create_experiment_div(initial_group))
+    experiment_checkbox = html.Div(id='experiment-select-div', children=experiment_div(initial_group))
     aggregate_mode = html.Div(children=[
         html.H5('Trial Aggregate Mode'),
         dcc.RadioItems(

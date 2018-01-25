@@ -80,7 +80,7 @@ class ExperimentGetOrCreateSerializer(serializers.Serializer):
         required=False,
         default=list
     )
-    n_trials = serializers.IntegerField(required=False, default=None)
+    n_trials = serializers.IntegerField(required=False, default=None, allow_null=True)
 
 
 class ResultSerializer(serializers.HyperlinkedModelSerializer):
