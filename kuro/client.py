@@ -260,7 +260,7 @@ class Trial:
             worker,
             experiment_instance['group'],
             experiment_instance['identifier'],
-            hyper_parameters=experiment_instance['hyper_parameters']
+            hyper_parameters=json.loads(experiment_instance['hyper_parameters'])
         )
 
         trial = cls()
