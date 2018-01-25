@@ -153,7 +153,7 @@ class Experiment:
         validated_metrics = {}
         if isinstance(metrics, dict):
             for name, mode in metrics.items():
-                validated_metrics[name] = mode
+                validated_metrics[name] = mode if mode is not None else 'auto'
         elif isinstance(metrics, list) or isinstance(metrics, tuple):
             for m in metrics:
                 if isinstance(m, str):
@@ -219,6 +219,7 @@ class Trial:
         self.experiment = None
         self.started_at = None
         self.complete = None
+
     def report_metric(self, name, value, step=None, mode=None):
         if name not in self.kuro_experiment.metrics:
             metric = self.kuro_experiment._init_metrics({name: mode})[name]
