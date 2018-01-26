@@ -46,7 +46,7 @@ class MetricSeries:
     def to_plot(self, name=None, y=None):
         return {
             'name': f'Experiment {self.experiment_id}, Trial {self.trial_id}' if name is None else name,
-            'mode': 'line',
+            'mode': 'lines+markers',
             'type': 'scatter',
             'x': self.steps,
             'y': self.values if y is None else y
@@ -125,6 +125,13 @@ def create_app():
         step_metric_data, summary_metric_data = create_metric_series(experiment_ids)
         return experiment_table(summary_metric_data, step_metric_data)
 
+    @app.callback(
+        Output('interval-component', 'interval'),
+        [Input('refresh-interval', 'value')]
+    )
+    def update_refresh_mode(refresh_interval):
+        return refresh_interval * 1000
+
     return app
 
 
@@ -192,6 +199,15 @@ def index():
     page = html.Div(children=[
         dcc.Interval(id='interval-component', interval=30 * 1000, n_intervals=0),
         info,
+        html.H5('Auto Refresh Toggle'),
+        dcc.RadioItems(
+            id='refresh-interval', options=[
+                {'label': '30s', 'value': 30},
+                {'label': '5m', 'value': 60 * 5},
+                {'label': 'off', 'value': 60 * 60 * 24}
+            ],
+            value=30
+        ),
         group_selector,
         aggregate_mode,
         experiment_checkbox,
