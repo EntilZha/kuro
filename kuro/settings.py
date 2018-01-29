@@ -78,11 +78,24 @@ WSGI_APPLICATION = 'kuro.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/2.0/ref/settings/#databases
 
+POSTGRES_CONFIG = {
+    'ENGINE': 'django.db.backends.postgresql',
+    'NAME': 'postgres',
+    'USER': 'postgres',
+    'HOST': 'localhost',
+    'PORT': 5432,
+    'PASSWORD': 'postgres'
+}
+
+SQLITE_CONFIG = {
+    'ENGINE': 'django.db.backends.sqlite3',
+    'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+}
+
+USE_POSTGRES = bool(os.environ.get('KURO_USE_POSTGRES', False))
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }
+    'default':  POSTGRES_CONFIG if USE_POSTGRES else SQLITE_CONFIG
 }
 
 
