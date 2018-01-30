@@ -18,7 +18,10 @@ setup(
         'dash-renderer==0.11.2',
         'dash-html-components==0.8.0',
         'dash-core-components==0.18.0',
-        'plotly'
+        'plotly',
+        'psycopg2',
+        'gunicorn',
+        'pygments'
     ],
     packages=find_packages(exclude=['contrib', 'docs', 'test*'])
 )

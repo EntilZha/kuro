@@ -1,4 +1,9 @@
 from django.contrib import admin
+from django.utils.safestring import mark_safe
+import json
+from pygments import highlight
+from pygments.lexers import JsonLexer
+from pygments.formatters import HtmlFormatter
 from kuro.web.models import Worker, Metric, Experiment, Trial, Result, ResultValue
 
 
@@ -11,8 +16,31 @@ class MetricAdmin(admin.ModelAdmin):
 
 
 class ExperimentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'group', 'identifier', 'n_trials', 'hyper_parameters')
+    list_display = ('id', 'group', 'identifier', 'n_trials', 'pretty_hyper_parameters')
     ordering = ('-id',)
+
+    readonly_fields = ('pretty_hyper_parameters',)
+
+    def pretty_hyper_parameters(self, instance):
+        """Function to display pretty version of our data"""
+
+        # Convert the data to sorted, indented JSON
+        response = json.dumps(json.loads(instance.hyper_parameters), sort_keys=True, indent=2)
+
+        # Truncate the data. Alter as needed
+        response = response[:5000]
+
+        # Get the Pygments formatter
+        formatter = HtmlFormatter(style='colorful')
+
+        # Highlight the data
+        response = highlight(response, JsonLexer(), formatter)
+
+        # Get the stylesheet
+        style = "<style>" + formatter.get_style_defs() + "</style><br>"
+
+        # Safe the output
+        return mark_safe(style + response)
 
 
 class TrialAdmin(admin.ModelAdmin):
