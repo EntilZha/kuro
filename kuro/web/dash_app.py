@@ -100,16 +100,27 @@ def create_app():
 
     @app.callback(
         Output('experiment-select-div', 'children'),
-        [Input('interval-component', 'n_intervals'), Input('group-select', 'value')]
+        [
+            Input('interval-component', 'n_intervals'),
+            Input('group-select', 'value'),
+            Input('experiment-toggle', 'value')
+        ]
     )
-    def update_experiment_div(n_intervals, group):
-        return experiment_div(group)
+    def update_experiment_div(n_intervals, group, experiment_toggle):
+        if experiment_toggle == 'no-filter':
+            return experiment_div(group)
+        elif experiment_toggle == 'select-all':
+            return experiment_div(group, select_all=True)
+        elif experiment_toggle == 'deselect-all':
+            return experiment_div(group, deselect_all=True)
+        else:
+            raise ValueError('Invalid experiment toggle value')
 
     @app.callback(
         Output('content', 'children'),
-        [Input('interval-component', 'n_intervals'), Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
+        [Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
     )
-    def update_experiment_plot(n_intervals, experiment_ids, aggregate_mode):
+    def update_experiment_plot(experiment_ids, aggregate_mode):
         if len(experiment_ids) == 0:
             return html.H5('No Experiments Selected')
         experiment_ids = [int(exp_id) for exp_id in experiment_ids]
@@ -118,9 +129,9 @@ def create_app():
 
     @app.callback(
         Output('experiment-table', 'rows'),
-        [Input('interval-component', 'n_intervals'), Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
+        [Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
     )
-    def update_experiment_table(n_intervals, experiment_ids, aggregate_mode):
+    def update_experiment_table(experiment_ids, aggregate_mode):
         experiment_ids = [int(exp_id) for exp_id in experiment_ids]
         step_metric_data, summary_metric_data = create_metric_series(experiment_ids)
         return experiment_table(summary_metric_data, step_metric_data)
@@ -135,12 +146,24 @@ def create_app():
     return app
 
 
-def experiment_div(group):
+def experiment_div(group, select_all=False, deselect_all=False):
     experiments = Experiment.objects.filter(group=group)
+    options = sorted(
+        [{'label': str(exp), 'value': exp.id} for exp in experiments],
+        key=lambda x: x['value'],
+        reverse=True
+    )
+    if select_all and deselect_all:
+        raise ValueError('Invalid combination of select_all and deselect_all')
+    elif deselect_all:
+        values = []
+    else:
+        values = [exp.id for exp in experiments]
+
     experiment_checkbox = dcc.Checklist(
         id='experiment-select',
-        options=[{'label': str(exp), 'value': exp.id} for exp in experiments],
-        values=[exp.id for exp in experiments]
+        options=options,
+        values=values
     )
     return html.Div(children=[
         html.H5('Experiment Select'),
@@ -172,14 +195,19 @@ def index():
 
     group_selector = html.Div(children=[
         html.H5('Group Selector'),
-        html.Div(children='There are no experiments and thus no groups, please add some' if initial_group =='empty' else ''),
+        html.Div(
+            'There are no experiments and thus no groups, please add some' if initial_group =='empty' else ''
+        ),
         dcc.RadioItems(
             id='group-select',
             options=[{'label': g, 'value': g} for g in groups],
             value=initial_group
         )
     ])
-    experiment_checkbox = html.Div(id='experiment-select-div', children=experiment_div(initial_group))
+    experiment_checkbox = html.Div(
+        id='experiment-select-div',
+        children=experiment_div(initial_group)
+    )
     aggregate_mode = html.Div(children=[
         html.H5('Trial Aggregate Mode'),
         dcc.RadioItems(
@@ -202,14 +230,24 @@ def index():
         html.H5('Auto Refresh Toggle'),
         dcc.RadioItems(
             id='refresh-interval', options=[
-                {'label': '30s', 'value': 30},
+                {'label': '60s', 'value': 60},
                 {'label': '5m', 'value': 60 * 5},
                 {'label': 'off', 'value': 60 * 60 * 24}
             ],
-            value=30
+            value=60
         ),
         group_selector,
         aggregate_mode,
+        html.H5('Experiment Select/Deselect All'),
+        dcc.RadioItems(
+            id='experiment-toggle',
+            options=[
+                {'label': 'No Option', 'value': 'no-filter'},
+                {'label': 'Select All', 'value': 'select-all'},
+                {'label': 'Deselect All', 'value': 'deselect-all'}
+            ],
+            value='no-filter'
+        ),
         experiment_checkbox,
         html.H5('Experiment Summary Table'),
         experiment_table,

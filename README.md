@@ -103,6 +103,16 @@ for the rest framework in kuro are at:
 * Django Admin: `/admin/`
 
 
+#### PostgreSQL
+
+At a certain point the concurrency supported by SQLite may not be sufficient to support multiple workers submitting
+experiment results. To fix this problem you will need to switch to using PostgreSQL. To do so you will need to:
+
+1. Install `docker` and `docker-compose`
+2. In the repository root run `docker-compose up`
+3. Set the environment variable `export KURO_USE_POSTGRES=1` on the command running the web server
+
+
 ### Future Features
 
 * Central server maintaining queue of work, and Workers being able to request work from the central server

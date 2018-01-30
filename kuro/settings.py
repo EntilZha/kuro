@@ -22,13 +22,16 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 's!42pz%k%a7qoer81831a&f+6o^91ntuz$0nku_v0vnry8w%v@'
 
+KURO_PRODUCTION = bool(os.environ.get('KURO_PRODUCTION', False))
+
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = not KURO_PRODUCTION
 
 ALLOWED_HOSTS = ['localhost']
 KURO_HOST = os.environ.get('KURO_HOST')
 if KURO_HOST is not None:
     ALLOWED_HOSTS.append(KURO_HOST)
+
 
 
 # Application definition
