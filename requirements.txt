@@ -13,3 +13,5 @@ dash-html-components==0.8.0
 dash-core-components==0.18.0
 dash-table-experiments==0.5.4
 plotly
+psycopg2
+gunicorn

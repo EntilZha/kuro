@@ -10,7 +10,9 @@ https://docs.djangoproject.com/en/2.0/howto/deployment/wsgi/
 import os
 
 from django.core.wsgi import get_wsgi_application
+from django.contrib.staticfiles.handlers import StaticFilesHandler
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "kuro.settings")
 
-application = get_wsgi_application()
+# StaticFilesHandler here is a hack, should fix at some point
+application = StaticFilesHandler(get_wsgi_application())
