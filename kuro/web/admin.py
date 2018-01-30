@@ -12,10 +12,12 @@ class MetricAdmin(admin.ModelAdmin):
 
 class ExperimentAdmin(admin.ModelAdmin):
     list_display = ('id', 'group', 'identifier', 'n_trials', 'hyper_parameters')
+    ordering = ('-id',)
 
 
 class TrialAdmin(admin.ModelAdmin):
     list_display = ('id', 'complete', 'worker', 'experiment', 'started_at')
+    ordering = ('-id',)
 
 
 class ResultAdmin(admin.ModelAdmin):
