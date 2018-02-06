@@ -1,4 +1,6 @@
 from typing import Dict, List, Tuple
+import json
+from itertools import groupby
 from collections import defaultdict
 
 from kuro.web.models import Experiment
@@ -6,7 +8,7 @@ from kuro.web.models import Experiment
 import numpy as np
 
 import dash
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 import dash_core_components as dcc
 import dash_html_components as html
 import dash_table_experiments as dt
@@ -99,40 +101,37 @@ def create_app():
     app.title = 'Kuro Dashboard'
 
     @app.callback(
-        Output('experiment-select-div', 'children'),
-        [
-            Input('interval-component', 'n_intervals'),
-            Input('group-select', 'value'),
-            Input('experiment-toggle', 'value')
-        ]
-    )
-    def update_experiment_div(n_intervals, group, experiment_toggle):
-        if experiment_toggle == 'no-filter':
-            return experiment_div(group)
-        elif experiment_toggle == 'select-all':
-            return experiment_div(group, select_all=True)
-        elif experiment_toggle == 'deselect-all':
-            return experiment_div(group, deselect_all=True)
-        else:
-            raise ValueError('Invalid experiment toggle value')
-
-    @app.callback(
         Output('content', 'children'),
-        [Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
+        [
+            Input('aggregate-mode', 'value'),
+            Input('update-tables-plots', 'n_clicks'),
+            Input('interval-component', 'n_intervals')
+        ],
+        [State('experiment-detail-table', 'rows'), State('experiment-detail-table', 'selected_row_indices')]
     )
-    def update_experiment_plot(experiment_ids, aggregate_mode):
-        if len(experiment_ids) == 0:
+    def update_experiment_plot(aggregate_mode, n_clicks, n_intervals, exp_rows, exp_selected_rows):
+        selected_experiments = []
+        for i in exp_selected_rows:
+            selected_experiments.append(exp_rows[i])
+        if len(selected_experiments) == 0:
             return html.H5('No Experiments Selected')
-        experiment_ids = [int(exp_id) for exp_id in experiment_ids]
+        experiment_ids = [int(exp['id']) for exp in selected_experiments]
         step_metric_data, summary_metric_data = create_metric_series(experiment_ids)
         return html.Div(plot_experiments(step_metric_data, aggregate_mode))
 
     @app.callback(
-        Output('experiment-table', 'rows'),
-        [Input('experiment-select', 'values'), Input('aggregate-mode', 'value')]
+        Output('experiment-trials-table', 'rows'),
+        [
+            Input('aggregate-mode', 'value'),
+            Input('update-tables-plots', 'n_clicks'), Input('interval-component', 'n_intervals')
+        ],
+        [State('experiment-detail-table', 'rows'), State('experiment-detail-table', 'selected_row_indices')]
     )
-    def update_experiment_table(experiment_ids, aggregate_mode):
-        experiment_ids = [int(exp_id) for exp_id in experiment_ids]
+    def update_experiment_trials_table(aggregate_mode, n_clicks, n_intervals, exp_rows, exp_selected_rows):
+        selected_experiments = []
+        for i in exp_selected_rows:
+            selected_experiments.append(exp_rows[i])
+        experiment_ids = [int(exp['id']) for exp in selected_experiments]
         step_metric_data, summary_metric_data = create_metric_series(experiment_ids)
         return experiment_table(summary_metric_data, step_metric_data)
 
@@ -146,29 +145,54 @@ def create_app():
     return app
 
 
-def experiment_div(group, select_all=False, deselect_all=False):
-    experiments = Experiment.objects.filter(group=group)
-    options = sorted(
-        [{'label': str(exp), 'value': exp.id} for exp in experiments],
-        key=lambda x: x['value'],
-        reverse=True
-    )
-    if select_all and deselect_all:
-        raise ValueError('Invalid combination of select_all and deselect_all')
-    elif deselect_all:
-        values = []
-    else:
-        values = [exp.id for exp in experiments]
+def filter_dictionaries(dictionaries):
+    all_kvs = []
+    for curr_dict in dictionaries:
+        dict_kvs = set()
+        for key, value in curr_dict.items():
+            try:
+                dict_kvs.add((key, value))
+            except TypeError:
+                pass
+        all_kvs.append(dict_kvs)
 
-    experiment_checkbox = dcc.Checklist(
-        id='experiment-select',
-        options=options,
-        values=values
+    common_kvs = set.intersection(*all_kvs)
+
+    filtered_dictionaries = []
+    for curr_dict in dictionaries:
+        new_dict = {}
+        for key, value in curr_dict.items():
+            try:
+                if (key, value) not in common_kvs:
+                    new_dict[key] = value
+            except TypeError:
+                new_dict[key] = value
+        filtered_dictionaries.append(new_dict)
+    return filtered_dictionaries
+
+
+def create_experiment_detail_table(group):
+    all_experiments = Experiment.objects.filter(group=group)
+    grouped_experiments = groupby(all_experiments, key=lambda e: e.identifier)
+    rows = []
+    for identifier, experiments in grouped_experiments:
+        experiments = list(experiments)
+        hp_dictionaries = [json.loads(e.hyper_parameters) for e in experiments]
+        filtered_hp_dictionaries = filter_dictionaries(hp_dictionaries)
+        for e, hp_dict in zip(experiments, filtered_hp_dictionaries):
+            rows.append({
+                'identifier': e.identifier,
+                'id': e.id,
+                'hyper_parameters': json.dumps(hp_dict)
+            })
+
+    return dt.DataTable(
+        rows=rows, id='experiment-detail-table',
+        row_selectable=True, filterable=True, sortable=True, enable_drag_and_drop=False, editable=False,
+        columns=['identifier', 'id', 'hyper_parameters'],
+        column_widths=[100, 50, None],
+        min_height=1000
     )
-    return html.Div(children=[
-        html.H5('Experiment Select'),
-        experiment_checkbox
-    ])
 
 dashboard_info_text = '''
 ### Kuro Dashboard Guide
@@ -193,21 +217,34 @@ def index():
     else:
         initial_group = next(iter(groups))
 
+    options_style = {
+        'display': 'inline-block',
+        'height': '300px',
+        'margin-left': '20px',
+        'margin-right': '20px',
+        'vertical-align': 'top'
+    }
+
+    auto_refresh_toggle = html.Div([
+        html.H5('Auto Refresh Toggle'),
+        dcc.RadioItems(
+            id='refresh-interval', options=[
+            {'label': '60s', 'value': 60},
+            {'label': '5m', 'value': 60 * 5},
+            {'label': 'off', 'value': 60 * 60 * 24}
+        ],
+        value=60
+    )], style=options_style)
+
     group_selector = html.Div(children=[
         html.H5('Group Selector'),
-        html.Div(
-            'There are no experiments and thus no groups, please add some' if initial_group =='empty' else ''
-        ),
         dcc.RadioItems(
             id='group-select',
             options=[{'label': g, 'value': g} for g in groups],
             value=initial_group
         )
-    ])
-    experiment_checkbox = html.Div(
-        id='experiment-select-div',
-        children=experiment_div(initial_group)
-    )
+    ], style=options_style)
+
     aggregate_mode = html.Div(children=[
         html.H5('Trial Aggregate Mode'),
         dcc.RadioItems(
@@ -219,38 +256,28 @@ def index():
             ],
             value='all'
         )
-    ])
-    experiment_table = dt.DataTable(
-        rows=[{}], id='experiment-table',
-        selected_row_indices=[], row_selectable=True, filterable=True, sortable=True
+    ], style=options_style)
+
+    experiment_detail_table = html.Div(
+        id='experiment-detail-div',
+        children=create_experiment_detail_table(initial_group)
+    )
+
+    experiment_trials_table = dt.DataTable(
+        rows=[{}], id='experiment-trials-table',
+        selected_row_indices=[],
+        row_selectable=True, filterable=True, sortable=True, enable_drag_and_drop=False, editable=False,
+        min_height=1000
     )
     page = html.Div(children=[
         dcc.Interval(id='interval-component', interval=30 * 1000, n_intervals=0),
         info,
-        html.H5('Auto Refresh Toggle'),
-        dcc.RadioItems(
-            id='refresh-interval', options=[
-                {'label': '60s', 'value': 60},
-                {'label': '5m', 'value': 60 * 5},
-                {'label': 'off', 'value': 60 * 60 * 24}
-            ],
-            value=60
-        ),
-        group_selector,
-        aggregate_mode,
-        html.H5('Experiment Select/Deselect All'),
-        dcc.RadioItems(
-            id='experiment-toggle',
-            options=[
-                {'label': 'No Option', 'value': 'no-filter'},
-                {'label': 'Select All', 'value': 'select-all'},
-                {'label': 'Deselect All', 'value': 'deselect-all'}
-            ],
-            value='no-filter'
-        ),
-        experiment_checkbox,
-        html.H5('Experiment Summary Table'),
-        experiment_table,
+        html.Div([auto_refresh_toggle, group_selector, aggregate_mode]),
+        html.H5('Experiment Summary'),
+        html.Button('Update Tables and Plots', id='update-tables-plots'),
+        experiment_detail_table,
+        html.H5('Trial Summary'),
+        experiment_trials_table,
         html.Div(id='content')
     ])
     return page
