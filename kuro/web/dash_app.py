@@ -110,6 +110,8 @@ def create_app():
         [State('experiment-detail-table', 'rows'), State('experiment-detail-table', 'selected_row_indices')]
     )
     def update_experiment_plot(aggregate_mode, n_clicks, n_intervals, exp_rows, exp_selected_rows):
+        if exp_selected_rows is None:
+            exp_selected_rows = []
         selected_experiments = []
         for i in exp_selected_rows:
             selected_experiments.append(exp_rows[i])
@@ -128,6 +130,8 @@ def create_app():
         [State('experiment-detail-table', 'rows'), State('experiment-detail-table', 'selected_row_indices')]
     )
     def update_experiment_trials_table(aggregate_mode, n_clicks, n_intervals, exp_rows, exp_selected_rows):
+        if exp_selected_rows is None:
+            exp_selected_rows = []
         selected_experiments = []
         for i in exp_selected_rows:
             selected_experiments.append(exp_rows[i])
