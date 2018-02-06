@@ -223,9 +223,9 @@ def index():
 
     options_style = {
         'display': 'inline-block',
-        'height': '300px',
         'margin-left': '20px',
         'margin-right': '20px',
+        'margin-bottom': '20px',
         'vertical-align': 'top'
     }
 
