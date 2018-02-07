@@ -21,7 +21,8 @@ setup(
         'plotly',
         'psycopg2',
         'gunicorn',
-        'pygments'
+        'pygments',
+        'pyfunctional'
     ],
     packages=find_packages(exclude=['contrib', 'docs', 'test*'])
 )

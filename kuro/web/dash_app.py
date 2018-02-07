@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple
 import json
 from itertools import groupby
 from collections import defaultdict
+from functional import seq
 
 from kuro.web.models import Experiment
 
@@ -177,7 +178,7 @@ def filter_dictionaries(dictionaries):
 
 def create_experiment_detail_table(group):
     all_experiments = Experiment.objects.filter(group=group)
-    grouped_experiments = groupby(all_experiments, key=lambda e: e.identifier)
+    grouped_experiments = seq(all_experiments).group_by(lambda e: e.identifier)
     rows = []
     for identifier, experiments in grouped_experiments:
         experiments = list(experiments)

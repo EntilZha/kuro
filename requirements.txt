@@ -16,3 +16,4 @@ plotly
 psycopg2
 gunicorn
 pygments
+pyfunctional
