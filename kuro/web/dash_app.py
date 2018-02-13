@@ -37,7 +37,8 @@ def dispatcher(request):
 
 
 class MetricSeries:
-    def __init__(self, experiment_id, trial_id, name, mode, values, steps):
+    def __init__(self, identifier, experiment_id, trial_id, name, mode, values, steps):
+        self.identifier = identifier
         self.experiment_id = experiment_id
         self.trial_id = trial_id
         self.name = name
@@ -47,6 +48,7 @@ class MetricSeries:
 
     def to_json(self):
         return {
+            'identifier': self.identifier,
             'experiment_id': self.experiment_id,
             'trial_id': self.trial_id,
             'name': self.name,
@@ -58,6 +60,7 @@ class MetricSeries:
     @classmethod
     def from_json(cls, json_obj):
         return MetricSeries(
+            json_obj['identifier'],
             json_obj['experiment_id'],
             json_obj['trial_id'],
             json_obj['name'],
@@ -69,16 +72,12 @@ class MetricSeries:
 
     def to_plot(self, name=None, y=None):
         return {
-            'name': f'Experiment {self.experiment_id}, Trial {self.trial_id}' if name is None else name,
+            'name': f'{self.identifier}, Exp {self.experiment_id}, Trial {self.trial_id}' if name is None else name,
             'mode': 'lines+markers',
             'type': 'scatter',
             'x': self.steps,
             'y': self.values if y is None else y
         }
-
-    @staticmethod
-    def aggregate(metric_plots, aggregate_mode='all'):
-        pass
 
     @staticmethod
     def to_figure(metric_plots, aggregate_mode='all'):
@@ -189,7 +188,7 @@ def create_app():
         rows = []
         for exp_id, metric_dict in metric_statistics.items():
             for name in metric_names:
-                if metric_name_filter in name:
+                if metric_name_filter is None or metric_name_filter in name:
                     r = {'experiment_id': exp_id, 'metric': name}
                     if name in metric_dict:
                         m_mean, m_max, m_std = metric_dict[name]
@@ -239,7 +238,7 @@ def create_app():
 
 
             figures.append(dcc.Graph(
-                id='experiment-aggregate-trials-plots-figure',
+                id=f'experiment-aggregate-trials-plots-figure-{m_name}',
                 figure={
                     'data': plots,
                     'layout': {
@@ -480,11 +479,11 @@ def create_metric_series(experiment_ids):
                 values = [v.value for v in result_values]
                 if len(steps) == 1:
                     summary_metric_data[(experiment.id, metric_name)].append(MetricSeries(
-                        experiment.id, trial.id, metric_name, metric_mode, values, steps
+                        experiment.identifier, experiment.id, trial.id, metric_name, metric_mode, values, steps
                     ))
                 else:
                     step_metric_data[(experiment.id, metric_name)].append(MetricSeries(
-                        experiment.id, trial.id, metric_name, metric_mode, values, steps
+                        experiment.identifier, experiment.id, trial.id, metric_name, metric_mode, values, steps
                     ))
 
     return step_metric_data, summary_metric_data
