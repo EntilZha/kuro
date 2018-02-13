@@ -1,6 +1,5 @@
 from typing import Dict, List, Tuple
 import json
-from itertools import groupby
 from collections import defaultdict
 from functional import seq
 
@@ -46,6 +45,28 @@ class MetricSeries:
         self.values = values
         self.steps = steps
 
+    def to_json(self):
+        return {
+            'experiment_id': self.experiment_id,
+            'trial_id': self.trial_id,
+            'name': self.name,
+            'mode': self.mode,
+            'values': self.values,
+            'steps': self.steps
+        }
+
+    @classmethod
+    def from_json(cls, json_obj):
+        return MetricSeries(
+            json_obj['experiment_id'],
+            json_obj['trial_id'],
+            json_obj['name'],
+            json_obj['mode'],
+            json_obj['values'],
+            json_obj['steps']
+        )
+
+
     def to_plot(self, name=None, y=None):
         return {
             'name': f'Experiment {self.experiment_id}, Trial {self.trial_id}' if name is None else name,
@@ -54,6 +75,10 @@ class MetricSeries:
             'x': self.steps,
             'y': self.values if y is None else y
         }
+
+    @staticmethod
+    def aggregate(metric_plots, aggregate_mode='all'):
+        pass
 
     @staticmethod
     def to_figure(metric_plots, aggregate_mode='all'):
@@ -123,14 +148,14 @@ def create_app():
         return html.Div(plot_experiments(step_metric_data, aggregate_mode))
 
     @app.callback(
-        Output('experiment-trials-table', 'rows'),
+        Output('experiment-trials-json', 'children'),
         [
             Input('aggregate-mode', 'value'),
             Input('update-tables-plots', 'n_clicks'), Input('interval-component', 'n_intervals')
         ],
         [State('experiment-detail-table', 'rows'), State('experiment-detail-table', 'selected_row_indices')]
     )
-    def update_experiment_trials_table(aggregate_mode, n_clicks, n_intervals, exp_rows, exp_selected_rows):
+    def update_experiment_trials_json(aggregate_mode, n_clicks, n_intervals, exp_rows, exp_selected_rows):
         if exp_selected_rows is None:
             exp_selected_rows = []
         selected_experiments = []
@@ -138,7 +163,93 @@ def create_app():
             selected_experiments.append(exp_rows[i])
         experiment_ids = [int(exp['id']) for exp in selected_experiments]
         step_metric_data, summary_metric_data = create_metric_series(experiment_ids)
+        json_step_data = {json.dumps(key): [v.to_json() for v in value] for key, value in step_metric_data.items()}
+        json_summary_data = {json.dumps(key): [v.to_json() for v in value] for key, value in summary_metric_data.items()}
+        return json.dumps([json_step_data, json_summary_data])
+
+    @app.callback(
+        Output('experiment-trials-table', 'rows'),
+        [
+            Input('experiment-trials-json', 'children'),
+        ]
+    )
+    def update_experiment_trials_table(metric_json):
+        step_metric_data, summary_metric_data = load_json_metrics(metric_json)
         return experiment_table(summary_metric_data, step_metric_data)
+
+    @app.callback(
+        Output('experiment-aggregate-trials-table', 'rows'),
+        [Input('experiment-trials-json', 'children'), Input('metric-name-filter', 'value')]
+    )
+    def update_experiment_aggregate_trials_table(metric_json, metric_name_filter):
+        if metric_json == '':
+            return []
+        step_metric_data, summary_metric_data = load_json_metrics(metric_json)
+        metric_statistics, metric_names = compute_experiment_aggregate_rows(step_metric_data, summary_metric_data)
+        rows = []
+        for exp_id, metric_dict in metric_statistics.items():
+            for name in metric_names:
+                if metric_name_filter in name:
+                    r = {'experiment_id': exp_id, 'metric': name}
+                    if name in metric_dict:
+                        m_mean, m_max, m_std = metric_dict[name]
+                        r['avg'] = m_mean
+                        r['max'] = m_max
+                        r['std'] = m_std
+                        rows.append(r)
+
+        return rows
+
+    @app.callback(
+        Output('experiment-aggregate-trials-plots', 'children'),
+        [Input('experiment-aggregate-trials-table', 'rows')]
+    )
+    def update_experiment_aggregate_trials_plots(rows):
+        metric_names = {r['metric'] for r in rows}
+        if len(metric_names) == 0:
+            return ''
+        figures = []
+        for m_name in metric_names:
+            plots = []
+            m_rows = [r for r in rows if r['metric'] == m_name]
+            x = [r['experiment_id'] for r in m_rows]
+            y_max = [r['max'] for r in m_rows]
+            y_std = [r['std'] for r in m_rows]
+            y_avg = [r['avg'] for r in m_rows]
+
+            for i in range(len(x)):
+                p = {
+                    'name': x[i],
+                    'type': 'bar',
+                    'x': ['max', 'avg'],
+                    'y': [y_max[i], y_avg[i]],
+                    'text': [x[i], x[i]],
+                    'textposition': 'auto',
+                    'error_y': {
+                        'type': 'data',
+                        'array': [y_std[i], y_std[i]],
+                        'visible': True
+                    }
+                }
+                plots.append(p)
+
+            def sort_key(p):
+                return p['y'][0]
+            plots.sort(key=sort_key, reverse=True)
+
+
+            figures.append(dcc.Graph(
+                id='experiment-aggregate-trials-plots-figure',
+                figure={
+                    'data': plots,
+                    'layout': {
+                        'title': f'Metric: {m_name}',
+                        'showlegend': True,
+                        'barmode': 'group'
+                    }
+                })
+            )
+        return figures
 
     @app.callback(
         Output('interval-component', 'interval'),
@@ -149,6 +260,50 @@ def create_app():
 
     return app
 
+
+MetricDataLookup = Dict[Tuple[int, str], List[MetricSeries]]
+
+
+def compute_experiment_aggregate_rows(step_metric_data, summary_metric_data):
+    metric_statistics = defaultdict(dict)
+    metric_names = set()
+
+    for (experiment_id, metric_name), val in step_metric_data.items():
+        metric_statistics[experiment_id][metric_name] = compute_experiment_statistics(val)
+        metric_names.add(metric_name)
+
+    for (experiment_id, metric_name), val in summary_metric_data.items():
+        metric_statistics[experiment_id][metric_name] = compute_experiment_statistics(val)
+        metric_names.add(metric_name)
+
+    return metric_statistics, metric_names
+
+
+def load_json_metrics(metric_json) -> Tuple[MetricDataLookup, MetricDataLookup]:
+    json_step_metric_data, json_summary_metric_data = json.loads(metric_json)
+    step_metric_data = {
+        tuple(json.loads(key)): [MetricSeries.from_json(v) for v in value] for key, value in json_step_metric_data.items()
+    }
+    summary_metric_data = {
+        tuple(json.loads(key)): [MetricSeries.from_json(v) for v in value] for key, value in json_summary_metric_data.items()
+    }
+    return step_metric_data, summary_metric_data
+
+def compute_experiment_statistics(trial_metric_series: List[MetricSeries]):
+    values = []
+    for ms in trial_metric_series:
+        if len(ms.values) == 0:
+            continue
+        elif len(ms.values) == 1:
+            values.append(ms.values[0])
+        else:
+            if ms.mode == 'max':
+                values.append(max(ms.values))
+            elif ms.mode == 'min':
+                values.append(min(ms.values))
+            else:
+                raise ValueError(f'Invalid mode {ms.mode}')
+    return np.mean(values), np.max(values), np.std(values)
 
 def filter_dictionaries(dictionaries):
     all_kvs = []
@@ -238,7 +393,7 @@ def index():
             {'label': '5m', 'value': 60 * 5},
             {'label': 'off', 'value': 60 * 60 * 24}
         ],
-        value=60
+        value=60 * 60 * 24
     )], style=options_style)
 
     group_selector = html.Div(children=[
@@ -274,6 +429,27 @@ def index():
         row_selectable=True, filterable=True, sortable=True, enable_drag_and_drop=False, editable=False,
         min_height=1000
     )
+
+    experiment_trials_json = html.Div(id='experiment-trials-json', style={'display': 'none'})
+    experiment_aggregate_trials_table = dt.DataTable(
+        rows=[{}], id='experiment-aggregate-trials-table',
+        selected_row_indices=[],
+        row_selectable=True, filterable=True, sortable=True, enable_drag_and_drop=False, editable=False,
+        min_height=1000
+    )
+    experiment_trials_div = html.Div(
+        id='experiment-trials-json',
+        children=[
+            experiment_trials_json,
+            html.H5('All Trials'),
+            experiment_trials_table,
+            html.H5('Aggregated Trials'),
+            html.Label('Metric Name Filter'),
+            dcc.Input(id='metric-name-filter'),
+            experiment_aggregate_trials_table,
+            html.Div(id='experiment-aggregate-trials-plots')
+        ]
+    )
     page = html.Div(children=[
         dcc.Interval(id='interval-component', interval=30 * 1000, n_intervals=0),
         info,
@@ -281,8 +457,7 @@ def index():
         html.H5('Experiment Summary'),
         html.Button('Update Tables and Plots', id='update-tables-plots'),
         experiment_detail_table,
-        html.H5('Trial Summary'),
-        experiment_trials_table,
+        experiment_trials_div,
         html.Div(id='content')
     ])
     return page
